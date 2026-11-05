@@ -13,7 +13,7 @@
 
 ## Демо
 
-После включения GitHub Pages: `https://<твой-ник>.github.io/<репозиторий>/`
+После включения GitHub Pages: https://golovkoy48-code.github.io/BceOK/
 
 ## Как запустить локально
 
