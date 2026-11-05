@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Поздравление — плавающие буквы</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kurale&family=Old+Standard+TT&family=Ruslan+Display&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#10201f; --panel:#18302e; --ink:#e9e2cf; --gold:#e2b857; --line:#2f4b48; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,sans-serif; min-height:100vh; display:flex; flex-direction:column; }
+  #stage { flex:1; display:flex; align-items:center; justify-content:center; padding:40px 24px; min-height:45vh; }
+  #out { font-family:'Ruslan Display',Georgia,serif; color:var(--gold); font-size:clamp(28px,6vw,64px); line-height:1.5; text-align:center; max-width:960px; --glow:0px; }
+  #stage { position:relative; overflow:hidden; }
+  #fx { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  #out { position:relative; z-index:1; }
+  button { background:var(--gold); color:#10201f; border:0; border-radius:6px; padding:8px 14px; font:inherit; font-weight:600; cursor:pointer; }
+  body.card #panel { display:none; }
+  body.card #stage { min-height:100vh; }
+  body.card #out { font-size:clamp(32px,7vw,96px); max-width:1100px; }
+  #cardbar { display:none; position:fixed; bottom:14px; left:50%; transform:translateX(-50%); gap:8px; z-index:10; opacity:.45; transition:opacity .2s; }
+  body.card #cardbar { display:flex; }
+  #cardbar:hover, #cardbar:focus-within { opacity:1; }
+  #bg { position:absolute; inset:0; background-size:cover; background-position:center; --dim:.3; }
+  #bg.has::after { content:""; position:absolute; inset:0; background:rgba(0,0,0,var(--dim)); }
+  body.final #panel, body.final #cardback { display:none !important; }
+  input[type=file] { font:inherit; font-size:13px; max-width:100%; }
+  body.final #cardshot, body.final #cardvid { display:none; }
+  #toast { position:fixed; top:14px; left:50%; transform:translateX(-50%); background:var(--gold); color:#10201f; padding:8px 14px; border-radius:6px; font-weight:600; z-index:20; display:none; }
+  .w { display:inline-block; white-space:nowrap; }
+  .c { display:inline-block; will-change:transform; text-shadow:0 0 var(--glow) currentColor; }
+  .sp { display:inline-block; width:.3em; }
+  #panel { background:var(--panel); border-top:1px solid var(--line); padding:20px 24px; display:grid; gap:16px; grid-template-columns:1fr; }
+  @media (min-width:900px){ #panel{ grid-template-columns:1fr 2fr; } .ctl{ grid-template-columns:1fr 1fr; column-gap:28px; } }
+  textarea { width:100%; min-height:110px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:10px; font:16px/1.4 system-ui,sans-serif; resize:vertical; }
+  .ctl { display:grid; gap:10px; align-content:start; }
+  label { display:grid; grid-template-columns:120px 1fr 44px; align-items:center; gap:10px; font-size:14px; }
+  output { text-align:right; color:var(--gold); }
+  input[type=range] { width:100%; accent-color:var(--gold); }
+  select { background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px; font:inherit; }
+  input[type=color] { width:44px; height:30px; padding:0; border:1px solid var(--line); background:none; }
+  input[type=checkbox] { justify-self:start; width:20px; height:20px; accent-color:var(--gold); }
+  :focus-visible { outline:2px solid var(--gold); outline-offset:2px; }
+  #note { font-size:13px; opacity:.7; margin:8px 0 0; }
+  #tap { position:fixed; inset:0; z-index:30; display:none; flex-direction:column; align-items:center; justify-content:center; gap:10px; width:100%; border-radius:0; background:rgba(16,32,31,.92); color:var(--gold); font-size:clamp(22px,5vw,44px); font-family:'Ruslan Display',Georgia,serif; font-weight:400; }
+  #tap small { font:inherit; font-size:.45em; color:var(--ink); opacity:.8; }
+  body.final.hasmusic:not(.started) #tap { display:flex; }
+  #cardmus { display:none; }
+  body.hasmusic #cardmus { display:inline-block; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="bg"></div><canvas id="fx" aria-hidden="true"></canvas><div id="out" aria-live="polite"></div></div>
+
+<div id="toast" role="status"></div>
+<button id="tap" type="button">▶ Открыть открытку<small>со звуком</small></button>
+<div id="cardbar"><button id="cardpop" type="button">Бабах!</button><button id="cardmus" type="button">♪ Музыка</button><button id="cardshot" type="button">Фото</button><button id="cardvid" type="button">Видео</button><button id="cardback" type="button">Назад к настройкам</button></div>
+<div id="panel">
+  <div>
+    <textarea id="txt" aria-label="Текст поздравления">Вітаю з Днем народження! Нехай кожен день буде світлим, а серце — спокійним.</textarea>
+    <p id="note">Проверка украинских букв: Ґанок, їжак, єдність, Київ. Чтобы крутить вручную, сними галочку «Анимация» и двигай «Сдвиг вручную».</p>
+  </div>
+  <div class="ctl">
+    <label>Шрифт<select id="font"><option>Ruslan Display</option><option>Kurale</option><option>Old Standard TT</option></select><span></span></label>
+    <label>Анимация<input id="anim" type="checkbox" checked><span></span></label>
+    <label>Цвет<select id="cmode"><option value="one">Один цвет</option><option value="grad">Градиент</option><option value="rainbow">Радуга</option></select><input id="c1" type="color" value="#e2b857"></label>
+    <label>Цвет 2 (градиент)<input id="c2" type="color" value="#d9534f"><span></span></label>
+    <label>Свечение<input id="glow" type="range" min="0" max="30" value="0"><output></output></label>
+    <label>Скорость<input id="speed" type="range" min="1" max="30" value="10"><output></output></label>
+    <label>Сдвиг вручную<input id="shift" type="range" min="0" max="63" value="0"><output></output></label>
+    <label>Шаг фазы<input id="phase" type="range" min="1" max="12" value="5"><output></output></label>
+    <label>Волна (высота)<input id="amp" type="range" min="0" max="40" value="12"><output></output></label>
+    <label>Качание вбок<input id="sway" type="range" min="0" max="30" value="0"><output></output></label>
+    <label>Пульс (размер)<input id="pulse" type="range" min="0" max="100" value="20"><output></output></label>
+    <label>Наклон (°)<input id="tilt" type="range" min="0" max="360" value="8"><output></output></label>
+    <label>Кручение<input id="spin" type="range" min="-30" max="30" value="0"><output></output></label>
+    <label>Дрожание<input id="jit" type="range" min="0" max="10" value="0"><output></output></label>
+    <label>Падает<select id="fxmode"><option value="none">Ничего</option><option value="confetti">Конфетти и серпантин</option><option value="stars">Звёзды</option><option value="snow">Снег</option></select><span></span></label>
+    <label>Количество<input id="fxcount" type="range" min="10" max="300" value="80"><output></output></label>
+    <label>Скорость падения<input id="fxspeed" type="range" min="1" max="10" value="4"><output></output></label>
+    <label>Хлопушка<button id="pop" type="button">Бабах!</button><span></span></label>
+    <label>Открытка<button id="cardbtn" type="button">Режим открытки</button><span></span></label>
+    <label>Фон (фото)<span style="grid-column:2/4"><input id="bgfile" type="file" accept="image/*,.png,.jpg,.jpeg,.webp,.gif,.bmp"><small id="bgstat" style="display:block;margin-top:4px;opacity:.8">Фото не выбрано</small></span></label>
+    <label>Затемнение фона<input id="dim" type="range" min="0" max="80" value="30"><output>30</output></label>
+    <label>Убрать фон<button id="bgclear" type="button">Убрать</button><span></span></label>
+    <label>Музыка (MP3)<span style="grid-column:2/4"><input id="mfile" type="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac"><small id="mstat" style="display:block;margin-top:4px;opacity:.8">Музыка не выбрана</small></span></label>
+    <label>Начало фрагмента<input id="mstart" type="range" min="0" max="0" value="0" disabled data-nosave="1"><output>0:00</output></label>
+    <label>Длина фрагмента<input id="mlen" type="range" min="1" max="15" value="15" disabled data-nosave="1"><output>15 с</output></label>
+    <label>Громкость<input id="mvol" type="range" min="0" max="100" value="80" data-nosave="1"><output>80</output></label>
+    <label>Плавное затухание<input id="mfade" type="checkbox" checked data-nosave="1"><span></span></label>
+    <label>Повторять<input id="mloop" type="checkbox" checked data-nosave="1"><span></span></label>
+    <label>Звук<span style="grid-column:2/4;display:flex;gap:8px"><button id="mplay" type="button" disabled>▶ Прослушать</button><button id="mclear" type="button">Убрать музыку</button></span></label>
+    <label>Готовая открытка<button id="save" type="button">Сохранить файл</button><span></span></label>
+    <label>Сохранить как<span style="grid-column:2/4;display:flex;gap:8px"><button id="shot" type="button">Фото (PNG)</button><button id="vid" type="button">Видео</button></span></label>
+    <label>Длина видео<select id="vlen"><option value="3">3 сек</option><option value="5" selected>5 сек</option><option value="8">8 сек</option><option value="10">10 сек</option><option value="15">15 сек</option><option value="frag">Как фрагмент музыки</option></select><span></span></label>
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var out = $('out'), txt = $('txt'), anim = $('anim');
+  var ids = ['glow','speed','shift','phase','amp','sway','pulse','tilt','spin','jit'];
+  var el = {}; ids.forEach(function (id) { el[id] = $(id); });
+  var chars = [];
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce) anim.checked = false;
+
+  function build() {
+    out.textContent = ''; chars = [];
+    var words = txt.value.split(/\s+/).filter(Boolean);
+    words.forEach(function (word, wi) {
+      var w = document.createElement('span'); w.className = 'w';
+      Array.from(word).forEach(function (ch) {
+        var s = document.createElement('span'); s.className = 'c'; s.textContent = ch;
+        w.appendChild(s); chars.push(s);
+      });
+      out.appendChild(w);
+      if (wi < words.length - 1) {
+        var sp = document.createElement('span'); sp.className = 'sp'; out.appendChild(sp);
+        out.appendChild(document.createTextNode(' '));
+      }
+    });
+  }
+
+  function showValues() {
+    ids.forEach(function (id) { el[id].nextElementSibling.textContent = el[id].value; });
+    out.style.setProperty('--glow', el.glow.value + 'px');
+  }
+
+  function hex(h) { return [1,3,5].map(function (i) { return parseInt(h.substr(i,2),16); }); }
+  function mix(a, b, k) { return 'rgb(' + a.map(function (v, i) { return Math.round(v + (b[i]-v)*k); }).join(',') + ')'; }
+
+  function frame(ms) {
+    var t = anim.checked ? ms / 1000 * (el.speed.value / 5) : el.shift.value / 10;
+    var amp = +el.amp.value, sway = +el.sway.value, pulse = el.pulse.value / 100,
+        tilt = +el.tilt.value, spin = +el.spin.value, jit = +el.jit.value, step = el.phase.value / 10;
+    var mode = $('cmode').value, a = hex($('c1').value), b = hex($('c2').value), n = chars.length;
+    for (var i = 0; i < n; i++) {
+      var p = t + i * step;
+      var x = Math.sin(p * 0.8 + 3) * sway + Math.sin(p * 17 + i * 3.1) * jit;
+      var y = Math.sin(p) * amp + Math.cos(p * 19 + i * 5.3) * jit;
+      var sc = 1 + Math.sin(p * 0.9 + 1) * pulse * 0.5;
+      var r = Math.sin(p * 1.1 + 2) * tilt + spin * p * 20;
+      var c = mode === 'rainbow' ? 'hsl(' + (((i * 18 + t * 40) % 360) + 360) % 360 + ',80%,62%)'
+            : mode === 'grad' ? mix(a, b, n > 1 ? i / (n - 1) : 0) : $('c1').value;
+      var s = chars[i].style;
+      s.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) rotate(' + r.toFixed(1) + 'deg) scale(' + sc.toFixed(3) + ')';
+      s.color = c;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  txt.addEventListener('input', build);
+  $('font').addEventListener('change', function () { out.style.fontFamily = "'" + this.value + "',Georgia,serif"; });
+  ids.forEach(function (id) { el[id].addEventListener('input', showValues); });
+  build(); showValues();
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var stage = $('stage'), cv = $('fx'), ctx = cv.getContext('2d');
+  var modeEl = $('fxmode'), countEl = $('fxcount'), speedEl = $('fxspeed');
+  var COLORS = ['#e2b857','#d9534f','#5bc0de','#7bd88f','#f08bd0','#ffffff'];
+  var W = 0, H = 0, dpr = 1, parts = [], burst = [], last = 0, tt = 0, lastMode = 'none';
+  var R = function (a, b) { return a + Math.random() * (b - a); };
+
+  [countEl, speedEl].forEach(function (e) {
+    var o = e.nextElementSibling, f = function () { o.textContent = e.value; };
+    e.addEventListener('input', f); f();
+  });
+
+  function size() {
+    var r = stage.getBoundingClientRect(); dpr = window.devicePixelRatio || 1;
+    if (r.width !== W || r.height !== H) {
+      W = r.width; H = r.height; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    }
+  }
+  function kindFor(mode) {
+    if (mode === 'stars') return 'star';
+    if (mode === 'snow') return 'snow';
+    return Math.random() < 0.4 ? 'stream' : 'rect';
+  }
+  function make(kind, x, y) {
+    return { k: kind, x: x, y: y, vx: 0, vy: R(40, 110), rot: R(0, 6.28), vr: R(-3, 3),
+             s: kind === 'snow' ? R(2, 5) : kind === 'star' ? R(5, 11) : R(6, 12),
+             col: kind === 'snow' ? '#ffffff' : kind === 'star' ? (Math.random() < 0.6 ? '#e2b857' : '#fff6d6') : COLORS[(Math.random() * COLORS.length) | 0],
+             ph: R(0, 6.28), sw: R(0.8, 2), dr: R(8, 30) };
+  }
+  function pop() {
+    var mode = 'confetti';
+    var vmax = Math.sqrt(2 * 600 * Math.max(H, 200) * 0.9);
+    for (var i = 0; i < 80; i++) {
+      var left = i % 2 === 0, p = make(kindFor(mode), left ? W * 0.05 : W * 0.95, H + 10);
+      p.vx = (left ? 1 : -1) * R(80, 420); p.vy = -vmax * R(0.55, 1); p.burst = true;
+      burst.push(p);
+    }
+  }
+  $('pop').addEventListener('click', pop);
+
+  function draw(p) {
+    ctx.save();
+    if (p.k === 'star') {
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(tt * 3 + p.ph);
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.col; ctx.beginPath();
+      for (var i = 0; i < 10; i++) {
+        var r = i % 2 ? p.s * 0.45 : p.s, a = i * Math.PI / 5 - Math.PI / 2;
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath(); ctx.fill();
+    } else if (p.k === 'snow') {
+      ctx.globalAlpha = 0.85; ctx.fillStyle = p.col; ctx.beginPath();
+      ctx.arc(p.x, p.y, p.s * 0.5, 0, 6.28); ctx.fill();
+    } else if (p.k === 'stream') {
+      ctx.strokeStyle = p.col; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath();
+      for (var k = 0; k < 14; k++) ctx.lineTo(p.x + Math.sin(p.ph + k * 0.55 + tt * 2) * 7, p.y - k * 5);
+      ctx.stroke();
+    } else {
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(1, Math.cos(p.ph + tt * 4));
+      ctx.fillStyle = p.col; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2);
+    }
+    ctx.restore();
+  }
+
+  function frame(ms) {
+    var dt = Math.min(0.05, (ms - last) / 1000 || 0); last = ms; tt += dt;
+    size(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    var mode = modeEl.value, sp = speedEl.value / 4, i, p;
+    if (mode !== lastMode) { parts = []; lastMode = mode; }
+    if (mode !== 'none') {
+      var target = +countEl.value;
+      while (parts.length < target) parts.push(make(kindFor(mode), R(0, W), parts.length < 1 ? R(0, H) : R(-H * 0.3, H)));
+      if (parts.length > target) parts.length = target;
+      for (i = 0; i < parts.length; i++) {
+        p = parts[i];
+        p.y += p.vy * sp * dt; p.x += Math.sin(p.ph + tt * p.sw) * p.dr * dt; p.rot += p.vr * dt;
+        if (p.y > H + 20) { p.y = -20; p.x = R(0, W); }
+        draw(p);
+      }
+    }
+    for (i = burst.length - 1; i >= 0; i--) {
+      p = burst[i]; p.vy += 600 * dt; p.vx *= 0.995; p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt * 3;
+      if (p.vy > 0) p.vy = Math.min(p.vy, 140 + p.s * 6);
+      if (p.y > H + 30) burst.splice(i, 1); else draw(p);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function open() {
+    document.body.classList.add('card');
+    var d = document.documentElement;
+    if (d.requestFullscreen) { try { d.requestFullscreen().catch(function () {}); } catch (e) {} }
+  }
+  function close() {
+    document.body.classList.remove('card');
+    if (document.fullscreenElement && document.exitFullscreen) { try { document.exitFullscreen(); } catch (e) {} }
+  }
+  $('cardbtn').addEventListener('click', open);
+  $('cardback').addEventListener('click', close);
+  $('cardpop').addEventListener('click', function () { $('pop').click(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+  document.addEventListener('fullscreenchange', function () { if (!document.fullscreenElement) document.body.classList.remove('card'); });
+})();
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var bg = $('bg'), dim = $('dim');
+
+  dim.addEventListener('input', function () {
+    bg.style.setProperty('--dim', dim.value / 100);
+    dim.nextElementSibling.textContent = dim.value;
+  });
+  var stat = $('bgstat');
+  function setBg(src, w, h, f) {
+    var k = Math.min(1, 1600 / Math.max(w, h));
+    var cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
+    var cx = cv.getContext('2d');
+    cx.fillStyle = '#10201f'; cx.fillRect(0, 0, cv.width, cv.height);
+    cx.drawImage(src, 0, 0, cv.width, cv.height);
+    bg.style.backgroundImage = 'url("' + cv.toDataURL('image/jpeg', 0.85) + '")';
+    bg.classList.add('has');
+    stat.textContent = 'Фон установлен: ' + w + '×' + h + ' (' + f.name + ')';
+  }
+  function explain(f, why) {
+    var kb = Math.round(f.size / 1024) + ' КБ';
+    f.slice(0, 16).arrayBuffer().then(function (buf) {
+      var b = new Uint8Array(buf), t = String.fromCharCode.apply(null, Array.from(b));
+      var msg;
+      if (f.size === 0) msg = 'файл пустой (0 байт). Если он лежит в облаке (OneDrive, Google Диск), сначала скачай его на компьютер.';
+      else if (b[0] === 0x3C || /^\s*(<|\{)/.test(t)) msg = 'внутри не картинка, а текст или веб-страница. Скорее всего, фото скачалось неправильно. Сохрани его заново через «Сохранить картинку как…».';
+      else if (t.slice(4, 8) === 'ftyp' && /hei|mif|msf/.test(t.slice(8, 12))) msg = 'это формат HEIC (так снимает iPhone), Chrome его не открывает. Пересохрани как JPG.';
+      else if (b[0] === 0xFF && b[1] === 0xD8) msg = 'JPEG-файл повреждён или обрезан.';
+      else if (t.slice(0, 4) === 'RIFF' || t.slice(0, 3) === 'GIF' || b[0] === 0x89) msg = 'формат распознан, но браузер не смог его декодировать. Попробуй пересохранить файл в другом редакторе.';
+      else msg = 'формат не распознан (первые байты: ' + Array.from(b.slice(0, 8)).map(function (x) { return x.toString(16).padStart(2, '0'); }).join(' ') + ').';
+      stat.textContent = 'Не удалось открыть «' + f.name + '» (' + kb + '): ' + msg;
+    }, function (e) {
+      stat.textContent = 'Не удалось прочитать «' + f.name + '» с диска (' + (e && e.name || 'ошибка') + '). Скопируй файл в обычную папку, например на рабочий стол, и выбери снова.';
+    });
+  }
+  $('bgfile').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) { stat.textContent = 'Фото не выбрано'; return; }
+    stat.textContent = 'Читаю «' + f.name + '»…';
+    function viaImage() {
+      var url = URL.createObjectURL(f), img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        try { setBg(img, img.width, img.height, f); } catch (e) { stat.textContent = 'Ошибка обработки: ' + e.message; }
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); explain(f); };
+      img.src = url;
+    }
+    if (window.createImageBitmap) {
+      createImageBitmap(f).then(function (bmp) {
+        try { setBg(bmp, bmp.width, bmp.height, f); } catch (e) { stat.textContent = 'Ошибка обработки: ' + e.message; }
+        if (bmp.close) bmp.close();
+      }, viaImage);
+    } else viaImage();
+  });
+  $('bgclear').addEventListener('click', function () {
+    bg.style.backgroundImage = ''; bg.classList.remove('has'); $('bgfile').value = ''; stat.textContent = 'Фото не выбрано';
+  });
+
+  $('save').addEventListener('click', function () {
+    var cm = window.CardMusic;
+    (cm ? cm.exportData() : Promise.resolve(null)).then(function (m) { if (m !== false) doSave(m); });
+  });
+  function doSave(music) {
+    var cfg = {};
+    document.querySelectorAll('#panel input, #panel select, #panel textarea').forEach(function (e) {
+      if (!e.id || e.type === 'file' || e.type === 'button' || e.dataset.nosave) return;
+      cfg[e.id] = e.type === 'checkbox' ? e.checked : e.value;
+    });
+    var inj = '<' + 'script>(function(){var cfg=' + JSON.stringify(cfg).replace(/</g, '\\u003c') +
+      ';Object.keys(cfg).forEach(function(id){var e=document.getElementById(id);if(!e)return;' +
+      'if(e.type==="checkbox")e.checked=cfg[id];else e.value=cfg[id];' +
+      'e.dispatchEvent(new Event("input"));e.dispatchEvent(new Event("change"));});' +
+      (music ? 'if(window.__loadMusic)window.__loadMusic(' + JSON.stringify(music).replace(/</g, '\\u003c') + ');' : '') +
+      'document.body.classList.add("card","final");})();<\/script>';
+    var html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+    var i = html.lastIndexOf('</' + 'body>');
+    html = html.slice(0, i) + inj + html.slice(i);
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    a.download = 'otkrytka.html';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  }
+})();
+</script>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var stage = $('stage'), out = $('out'), bg = $('bg'), fx = $('fx'), toast = $('toast');
+  var cache = { key: '', img: null }, recording = false;
+  var RE = /translate\(([-\d.eE+]+)px,\s*([-\d.eE+]+)px\)\s*rotate\(([-\d.eE+]+)deg\)\s*scale\(([-\d.eE+]+)\)/;
+
+  function loadBg() {
+    var m = /url\("?([^")]+)"?\)/.exec(bg.style.backgroundImage || '');
+    if (!m || !bg.classList.contains('has')) return Promise.resolve(null);
+    if (cache.key === m[1] && cache.img) return Promise.resolve(cache.img);
+    return new Promise(function (res) {
+      var im = new Image();
+      im.onload = function () { cache = { key: m[1], img: im }; res(im); };
+      im.onerror = function () { res(null); };
+      im.src = m[1];
+    });
+  }
+  function prepare(scaleFor) {
+    var r = stage.getBoundingClientRect(), W = r.width, H = r.height, S = scaleFor(W);
+    var cs = getComputedStyle(out);
+    var dim = parseFloat(bg.style.getPropertyValue('--dim')); if (isNaN(dim)) dim = 0.3;
+    var letters = [].map.call(out.querySelectorAll('.c'), function (e) {
+      return { e: e, ch: e.textContent,
+        cx: out.offsetLeft + e.offsetLeft + e.offsetWidth / 2,
+        cy: out.offsetTop + e.offsetTop + e.offsetHeight / 2 };
+    });
+    return Promise.all([loadBg(), document.fonts ? document.fonts.ready : null]).then(function (a) {
+      return { W: W, H: H, cw: Math.round(W * S / 2) * 2, ch: Math.round(H * S / 2) * 2,
+        fs: parseFloat(cs.fontSize), fam: cs.fontFamily,
+        glow: parseFloat(out.style.getPropertyValue('--glow')) || 0, dim: dim, letters: letters, bg: a[0] };
+    });
+  }
+  function draw(ctx, P) {
+    var k = P.cw / P.W;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#10201f'; ctx.fillRect(0, 0, P.cw, P.ch);
+    if (P.bg) {
+      var s = Math.max(P.cw / P.bg.width, P.ch / P.bg.height);
+      ctx.drawImage(P.bg, (P.cw - P.bg.width * s) / 2, (P.ch - P.bg.height * s) / 2, P.bg.width * s, P.bg.height * s);
+      ctx.fillStyle = 'rgba(0,0,0,' + P.dim + ')'; ctx.fillRect(0, 0, P.cw, P.ch);
+    }
+    ctx.drawImage(fx, 0, 0, P.cw, P.ch);
+    ctx.font = (P.fs * k) + 'px ' + P.fam; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    var m = ctx.measureText('Ag');
+    var off = ((m.fontBoundingBoxAscent || P.fs * k * 0.8) - (m.fontBoundingBoxDescent || P.fs * k * 0.2)) / 2;
+    for (var i = 0; i < P.letters.length; i++) {
+      var L = P.letters[i], t = RE.exec(L.e.style.transform) || [0, 0, 0, 0, 1];
+      ctx.save();
+      ctx.translate((L.cx + +t[1]) * k, (L.cy + +t[2]) * k);
+      ctx.rotate(t[3] * Math.PI / 180); ctx.scale(t[4], t[4]);
+      ctx.fillStyle = L.e.style.color || '#e2b857';
+      if (P.glow) { ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = P.glow * k; }
+      ctx.fillText(L.ch, 0, off);
+      ctx.restore();
+    }
+  }
+  function download(blob, name) {
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+  }
+  function photo() {
+    prepare(function (W) { return Math.min(3, Math.max(1, 1920 / W)); }).then(function (P) {
+      var c = document.createElement('canvas'); c.width = P.cw; c.height = P.ch;
+      draw(c.getContext('2d'), P);
+      c.toBlob(function (b) { download(b, 'otkrytka.png'); }, 'image/png');
+    });
+  }
+  function video() {
+    if (recording) return;
+    if (!window.MediaRecorder) { alert('Этот браузер не умеет записывать видео. Открой файл в Chrome или Edge.'); return; }
+    var secs = $('vlen').value === 'frag' ? ((window.CardMusic && window.CardMusic.fragLen()) || 5) : +$('vlen').value;
+    if (window.CardMusic) window.CardMusic.warm();
+    prepare(function (W) { return Math.min(2, 1280 / W); }).then(function (P) {
+      var c = document.createElement('canvas'); c.width = P.cw; c.height = P.ch;
+      var ctx = c.getContext('2d');
+      var hasA = window.CardMusic && window.CardMusic.has();
+      var mime = (hasA ? ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus'] : []).concat(['video/mp4;codecs=avc1.42E01E', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'])
+        .filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0] || '';
+      var vstream = c.captureStream(30), atr = window.CardMusic ? window.CardMusic.begin(secs) : null;
+      if (atr) atr.forEach(function (t) { vstream.addTrack(t); });
+      var rec = new MediaRecorder(vstream, mime ? { mimeType: mime, videoBitsPerSecond: 6000000 } : {});
+      var chunks = [];
+      rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onstop = function () {
+        if (window.CardMusic) window.CardMusic.end();
+        recording = false; toast.style.display = 'none';
+        var type = rec.mimeType || 'video/webm';
+        download(new Blob(chunks, { type: type }), 'otkrytka.' + (/mp4/.test(type) ? 'mp4' : 'webm'));
+      };
+      var t0 = performance.now(); recording = true; rec.start();
+      (function loop() {
+        var el = (performance.now() - t0) / 1000;
+        draw(ctx, P);
+        toast.style.display = 'block'; toast.textContent = 'Идёт запись, не закрывай вкладку: ' + Math.max(0, Math.ceil(secs - el)) + ' с';
+        if (el < secs) requestAnimationFrame(loop); else rec.stop();
+      })();
+    });
+  }
+  $('shot').addEventListener('click', photo); $('cardshot').addEventListener('click', photo);
+  $('vid').addEventListener('click', video); $('cardvid').addEventListener('click', video);
+})();
+</script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var au = new Audio(); au.preload = 'auto';
+  var file = null, url = '', fixed = null, dur = 0, loaded = false, playing = false, timer = 0, recEnd = null;
+  var ctx = null, gain = null, dest = null;
+  var FADE = 1.5, LIMIT = 4 * 1024 * 1024;
+  var fileEl = $('mfile'), stat = $('mstat'), sEl = $('mstart'), lEl = $('mlen'), vEl = $('mvol'),
+      fadeEl = $('mfade'), loopEl = $('mloop'), pBtn = $('mplay'), cBtn = $('cardmus');
+  var fmt = function (s) { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); };
+
+  function P() {
+    return fixed || { start: +sEl.value, len: +lEl.value, vol: vEl.value / 100, fade: fadeEl.checked, loop: loopEl.checked };
+  }
+  function show() {
+    sEl.nextElementSibling.textContent = fmt(sEl.value);
+    lEl.nextElementSibling.textContent = lEl.value + ' с';
+    vEl.nextElementSibling.textContent = vEl.value;
+  }
+  function ui() {
+    pBtn.textContent = playing ? '⏸ Стоп' : '▶ Прослушать';
+    cBtn.textContent = playing ? '♪ Выкл' : '♪ Музыка';
+    document.body.classList.toggle('hasmusic', loaded);
+  }
+  function statText() { return file ? 'Музыка: «' + file.name + '» (' + fmt(dur) + ')' : 'Музыка не выбрана'; }
+
+  /* Web Audio: громкость и затухание через GainNode, плюс поток для записи видео */
+  function setG(g) { if (gain) gain.gain.value = g; else au.volume = Math.max(0, Math.min(1, g)); }
+  function warm() {
+    if (ctx || !loaded) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+      ctx = new AC();
+      var src = ctx.createMediaElementSource(au);
+      gain = ctx.createGain(); dest = ctx.createMediaStreamDestination();
+      src.connect(gain); gain.connect(ctx.destination); gain.connect(dest);
+      au.volume = 1;
+    } catch (e) { ctx = gain = dest = null; }
+  }
+
+  function tick() {
+    var p = P(), end = recEnd !== null ? recEnd : p.start + p.len, ct = au.currentTime;
+    if (ct >= end - 0.03 || au.ended) {
+      if (p.loop) {
+        au.currentTime = p.start;
+        if (au.paused) { var r = au.play(); if (r && r.catch) r.catch(function () {}); }
+      } else { stop(); }
+      return;
+    }
+    var g = p.vol;
+    if (p.fade) g *= Math.min(1, Math.max(0, (end - ct) / FADE));
+    g *= Math.min(1, Math.max(0, (ct - p.start) / 0.2));
+    setG(g);
+  }
+  function play() {
+    if (!loaded) return;
+    warm();
+    if (ctx && ctx.state === 'suspended') ctx.resume();
+    var p = P(); setG(0);
+    try { au.currentTime = p.start; } catch (e) {}
+    var r = au.play();
+    if (r && r.catch) r.catch(function () { stat.textContent = 'Браузер не дал включить звук. Нажми ещё раз.'; stop(); });
+    playing = true; clearInterval(timer); timer = setInterval(tick, 40); ui();
+  }
+  function stop() { au.pause(); playing = false; clearInterval(timer); ui(); }
+
+  /* выбор файла */
+  function lenSync(reset) {
+    var mx = Math.max(1, Math.floor(dur - (+sEl.value)));
+    lEl.min = 1; lEl.max = mx;
+    lEl.value = reset ? Math.min(15, mx) : Math.min(+lEl.value, mx);
+    show();
+  }
+  function enable(on) { [sEl, lEl, pBtn].forEach(function (e) { e.disabled = !on; }); }
+  function fail(f) {
+    loaded = false; file = null; enable(false); ui();
+    stat.textContent = 'Не удалось открыть «' + f.name + '» как аудио. Подойдут MP3, M4A, OGG, WAV.';
+  }
+  fileEl.addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    stop(); fixed = null; loaded = false; enable(false); ui();
+    if (url) URL.revokeObjectURL(url);
+    file = f; url = URL.createObjectURL(f);
+    stat.textContent = 'Читаю «' + f.name + '»…';
+    au.onloadedmetadata = function () {
+      dur = au.duration;
+      if (!isFinite(dur) || dur < 1) { fail(f); return; }
+      sEl.max = Math.max(0, Math.floor(dur) - 1); sEl.value = 0; lenSync(true);
+      loaded = true; enable(true); ui(); show();
+      stat.textContent = statText();
+    };
+    au.onerror = function () { fail(f); };
+    au.src = url; au.load();
+  });
+  sEl.addEventListener('input', function () { lenSync(false); });
+  lEl.addEventListener('input', show);
+  vEl.addEventListener('input', show);
+  [sEl, lEl].forEach(function (e) { e.addEventListener('change', function () { if (playing) play(); }); });
+  $('mclear').addEventListener('click', function () {
+    stop(); au.onloadedmetadata = au.onerror = null; au.removeAttribute('src'); au.load();
+    if (url) URL.revokeObjectURL(url);
+    url = ''; file = null; fixed = null; loaded = false; fileEl.value = '';
+    enable(false); stat.textContent = statText(); ui();
+  });
+  pBtn.addEventListener('click', function () { if (playing) stop(); else play(); });
+  cBtn.addEventListener('click', function () { if (playing) stop(); else play(); });
+
+  /* режим открытки: музыка стартует вместе с ним */
+  $('cardbtn').addEventListener('click', function () { if (loaded && !playing) play(); });
+  $('cardback').addEventListener('click', stop);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !document.body.classList.contains('final')) stop();
+  });
+  document.addEventListener('fullscreenchange', function () {
+    if (!document.fullscreenElement && !document.body.classList.contains('final')) stop();
+  });
+  /* готовая открытка: экран «нажми», чтобы браузер разрешил звук */
+  $('tap').addEventListener('click', function () {
+    document.body.classList.add('started'); play(); $('pop').click();
+  });
+  window.__loadMusic = function (m) {
+    fixed = m; file = null; au.src = m.src; loaded = true; ui();
+  };
+
+  /* экспорт: целиком, если файл небольшой, иначе вырезаем фрагмент в WAV */
+  function dataURL(blob) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { res(fr.result); };
+      fr.onerror = function () { rej(fr.error); };
+      fr.readAsDataURL(blob);
+    });
+  }
+  function cutWav(f, start, len) {
+    return f.arrayBuffer().then(function (buf) {
+      var AC = window.AudioContext || window.webkitAudioContext, dc = ctx || new AC();
+      return new Promise(function (res, rej) {
+        var pr = dc.decodeAudioData(buf, res, rej);
+        if (pr && pr.catch) pr.catch(function () {});
+      });
+    }).then(function (ab) {
+      var sr = ab.sampleRate, s0 = Math.floor(start * sr), n = Math.max(1, Math.min(Math.floor(len * sr), ab.length - s0));
+      var ch = Math.min(2, ab.numberOfChannels);
+      if (n * ch * 2 > 10e6) ch = 1;
+      if (n * ch * 2 > 14e6 && !confirm('Фрагмент получится очень большим (' + Math.round(n * ch * 2 / 1e6) + ' МБ). Всё равно сохранить? (Можно сделать фрагмент короче.)')) return null;
+      var bytes = 44 + n * ch * 2, v = new DataView(new ArrayBuffer(bytes)), o = 0;
+      var ws = function (s) { for (var i = 0; i < s.length; i++) v.setUint8(o++, s.charCodeAt(i)); };
+      ws('RIFF'); v.setUint32(o, bytes - 8, true); o += 4; ws('WAVEfmt '); v.setUint32(o, 16, true); o += 4;
+      v.setUint16(o, 1, true); o += 2; v.setUint16(o, ch, true); o += 2; v.setUint32(o, sr, true); o += 4;
+      v.setUint32(o, sr * ch * 2, true); o += 4; v.setUint16(o, ch * 2, true); o += 2; v.setUint16(o, 16, true); o += 2;
+      ws('data'); v.setUint32(o, n * ch * 2, true); o += 4;
+      var a = ab.getChannelData(0), b = ab.numberOfChannels > 1 ? ab.getChannelData(1) : a;
+      for (var i = 0; i < n; i++) {
+        for (var c = 0; c < ch; c++) {
+          var x = ch === 1 ? (a[s0 + i] + b[s0 + i]) / 2 : (c ? b[s0 + i] : a[s0 + i]);
+          x = Math.max(-1, Math.min(1, x));
+          v.setInt16(o, x < 0 ? x * 32768 : x * 32767, true); o += 2;
+        }
+      }
+      return dataURL(new Blob([v], { type: 'audio/wav' }));
+    });
+  }
+
+  window.CardMusic = {
+    has: function () { return loaded; },
+    fragLen: function () { return loaded ? P().len : 0; },
+    warm: warm,
+    begin: function (secs) {
+      if (!loaded) return null;
+      stop(); warm();
+      if (!dest) return null;
+      var p = P(); recEnd = p.start + Math.min(p.len, secs);
+      play();
+      return dest.stream.getAudioTracks();
+    },
+    end: function () { recEnd = null; stop(); },
+    exportData: function () {
+      if (!loaded || !file) return Promise.resolve(null);
+      var p = P(), out = { start: p.start, len: p.len, vol: p.vol, fade: p.fade, loop: p.loop, src: '' };
+      stat.textContent = 'Готовлю музыку для открытки…';
+      var job = file.size <= LIMIT
+        ? dataURL(file).then(function (u) { out.src = u; return out; })
+        : cutWav(file, p.start, p.len).then(function (u) { if (!u) return false; out.src = u; out.start = 0; return out; });
+      return job.then(function (r) { stat.textContent = statText(); return r; }, function () {
+        stat.textContent = statText();
+        alert('Не удалось подготовить музыку, открытка сохранится без неё.');
+        return null;
+      });
+    }
+  };
+  show(); ui();
+})();
+</script>
+</body>
+</html>

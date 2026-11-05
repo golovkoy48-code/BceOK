@@ -2,133 +2,26 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>THE NODES — AI Band</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Playground</title>
 <style>
-:root{--bg:#070916;--fg:#e8f0ff;--mu:#8fa3c8;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#070916}}
-:root[data-theme="dark"]{--bg:#070916}
-*{box-sizing:border-box;margin:0}
-html,body{height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;overflow:hidden}
-body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.4vh;padding:1.5vh 2vw}
-svg{width:min(98vw,190vh);max-height:76vh;height:auto;display:block}
-.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center}
-button{font:inherit;font-size:clamp(.9rem,2.6vw,1.1rem);color:var(--fg);background:linear-gradient(135deg,rgba(94,231,255,.25),rgba(167,139,250,.3));border:1px solid rgba(160,190,255,.45);border-radius:99px;padding:.55em 1.4em;cursor:pointer}
-label{font-size:.85rem;color:var(--mu);display:flex;gap:8px;align-items:center}
-.sm{font-size:.76rem;color:var(--mu);text-align:center}
-.m{cursor:pointer}.mu{opacity:.38}
-.sw{animation:sw calc(var(--b,.55s)*2) ease-in-out infinite}
-.cr{animation:cb var(--b,.55s) ease-in-out infinite}
-.sp{transform-box:fill-box;transform-origin:center;animation:spin calc(var(--b,.55s)*2) linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.bm{animation:bm calc(var(--b,.55s)*4) ease-in-out infinite}
-svg:not(.on) *{animation-play-state:paused}
-@keyframes sw{0%,100%{transform:rotate(-2deg)}50%{transform:rotate(2deg)}}
-@keyframes cb{50%{transform:translateY(-5px)}}
-@keyframes bm{0%,100%{opacity:.05}50%{opacity:.17}}
+:root{--bg:#090b1a;--fg:#e8f0ff;--mu:#8fa3c8;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;padding:8vh 6vw}
+h1{margin:0 0 .3em}p{color:var(--mu);max-width:36em}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-top:2em;max-width:720px}
+a{display:block;padding:1.1em 1.3em;border:1px solid rgba(160,190,255,.35);border-radius:14px;color:var(--fg);text-decoration:none;background:rgba(255,255,255,.05)}
+a:hover{background:rgba(255,255,255,.12)}
+small{display:block;color:var(--mu);margin-top:.3em}
 </style>
 </head>
 <body>
-<svg id="sv" viewBox="0 0 600 310" role="img" aria-label="ИИ-группа THE NODES на сцене">
-<defs>
-<linearGradient id="gSk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#5ee7ff"/><stop offset="1" stop-color="#b08bff"/></linearGradient>
-<linearGradient id="fl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c2252"/><stop offset="1" stop-color="#0a0d22"/></linearGradient>
-<radialGradient id="bg" cx=".5" cy=".3" r=".9"><stop offset="0" stop-color="#1a2160"/><stop offset="1" stop-color="#070916"/></radialGradient>
-</defs>
-<rect width="600" height="310" fill="url(#bg)"/>
-<g id="beams"></g>
-<rect x="130" y="14" width="340" height="96" rx="8" fill="#0a0f2e" stroke="#5ee7ff" stroke-opacity=".6"/>
-<text x="300" y="50" font-size="28" font-weight="800" text-anchor="middle" fill="url(#gSk)" letter-spacing="3">THE NODES</text>
-<text x="300" y="66" font-size="9" text-anchor="middle" fill="#8fa3c8" letter-spacing="4">AI BAND · LIVE</text>
-<text x="592" y="16" text-anchor="end" font-size="8" fill="#8fa3c8">сделано Claude · Anthropic</text>
-<g id="bars"></g>
-<rect y="242" width="600" height="68" fill="url(#fl)"/>
-<path d="M0 252H600M0 266H600M0 284H600" stroke="#5ee7ff" stroke-opacity=".15"/>
-<g id="cast"></g>
-<g id="crowd" fill="#05071a"></g>
-</svg>
-<div class="row">
-  <button id="pb">▶ Играть</button>
-  <label>темп <input id="bp" type="range" min="80" max="150" value="110"> <span id="bv">110</span></label>
+<h1>AI Playground</h1>
+<p>Небольшие самостоятельные веб-вещицы, сделанные вместе с ИИ. Один HTML-файл на проект, без установки.</p>
+<div class="grid">
+<a href="dance-crew/">💃 AI Dance Crew<small>Танцующая команда ИИ, соло по клику, музыка в браузере</small></a>
+<a href="ai-band/">🎸 THE NODES — AI Band<small>Группа ИИ</small></a>
+<a href="greeting-card/">🎂 Поздравление<small>Плавающие буквы, конфетти, своё фото и своя музыка</small></a>
 </div>
-<div class="sm">Нажмите на музыканта — заглушить или вернуть его партию.</div>
-<script>
-(function(){
-var SP='M0-5C.6-1.5 1.5-.6 5 0 1.5.6.6 1.5 0 5-.6 1.5-1.5.6-5 0-1.5-.6-.6-1.5 0-5Z';
-var HD={
-local:'<rect x="-20" y="-42" width="40" height="36" rx="5" fill="#9ca3af"/><rect x="-15" y="-37" width="30" height="22" rx="3" fill="#07130d"/><g fill="#6ee7a8"><rect x="-10" y="-32" width="6" height="6"/><rect x="4" y="-32" width="6" height="6"/></g><rect x="-7" y="-21" width="14" height="2.4" fill="#6ee7a8"/>',
-gem:'<ellipse cy="-22" rx="21" ry="20" fill="url(#gSk)"/><g fill="#fff"><path transform="translate(-8 -24)" d="'+SP+'"/><path transform="translate(8 -24)" d="'+SP+'"/></g><path d="M-6-13q6 6 12 0" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round"/>',
-cla:'<circle cy="-22" r="21" fill="#d97757"/><path d="M0-43V-51M-7-42L-11-49M7-42L11-49" stroke="#d97757" stroke-width="3" stroke-linecap="round"/><g fill="none" stroke="#3b2f2a" stroke-width="1.8"><circle cx="-8" cy="-24" r="6.5"/><circle cx="8" cy="-24" r="6.5"/></g><g fill="#2a1a14"><circle cx="-8" cy="-24" r="2.2"/><circle cx="8" cy="-24" r="2.2"/></g><path d="M-6-13q6 6 12 0" stroke="#2a1a14" stroke-width="2" fill="none" stroke-linecap="round"/>',
-gro:'<path d="M-18-42L0-47L18-42L22-22L18-3L0 2L-18-3L-22-22Z" fill="#ff7a45"/><rect x="-17" y="-31" width="34" height="11" rx="5.5" fill="#111"/><g fill="#fff"><rect x="-11" y="-27" width="8" height="3" rx="1.5"/><rect x="3" y="-27" width="8" height="3" rx="1.5"/></g>',
-orr:'<rect x="-20" y="-42" width="40" height="36" rx="10" fill="#2dd4bf"/><path d="M0-42V-52" stroke="#2dd4bf" stroke-width="2.4"/><circle cy="-54" r="3.4" fill="#fbbf24"/><g fill="#08272e"><circle cx="-8" cy="-26" r="3"/><circle cx="8" cy="-26" r="3"/></g><path d="M-7-15h14" stroke="#08272e" stroke-width="2.4" stroke-linecap="round"/>'};
-HD.nv='<rect x="-20" y="-42" width="40" height="36" rx="8" fill="#76b900"/><g fill="#4a7300"><rect x="-11" y="-48" width="4" height="6"/><rect x="-2" y="-48" width="4" height="6"/><rect x="7" y="-48" width="4" height="6"/></g><rect x="-15" y="-33" width="30" height="15" rx="7.5" fill="#0b1400"/><g fill="#b6ff3c"><circle cx="-6" cy="-25.5" r="4"/><circle cx="6" cy="-25.5" r="4"/></g><g fill="#0b1400"><circle cx="-6" cy="-25.5" r="1.6"/><circle cx="6" cy="-25.5" r="1.6"/></g>';
-var EM={
-local:'<path d="M-9 1L0-9L9 1V9H-9Z" fill="none" stroke="#6ee7a8" stroke-width="2" stroke-linejoin="round"/>',
-gem:'<path d="M0-10C1.5-3 3-1.5 10 0C3 1.5 1.5 3 0 10C-1.5 3-3 1.5-10 0C-3-1.5-1.5-3 0-10Z" fill="url(#gSk)"/>',
-cla:'<path d="M0-9V9M-9 0H9M-6.4-6.4L6.4 6.4M-6.4 6.4L6.4-6.4" stroke="#d97757" stroke-width="2.6" stroke-linecap="round"/>',
-gro:'<path d="M2-10L-6 2H0L-2 10L6-2H0Z" fill="#ff5a1f"/>',
-orr:'<g stroke="#5eead4" stroke-width="1.8"><path d="M0 0L-7 6M0 0L7 6M0 0L0-8"/></g><g fill="#5eead4"><circle cx="-7" cy="6" r="2.6"/><circle cx="7" cy="6" r="2.6"/><circle cy="-8" r="2.6"/></g>'};
-EM.nv='<rect x="-7" y="-7" width="14" height="14" rx="2" fill="none" stroke="#76b900" stroke-width="2"/><rect x="-3" y="-3" width="6" height="6" fill="#76b900"/><path d="M-4-10v3M0-10v3M4-10v3M-4 7v3M0 7v3M4 7v3" stroke="#76b900" stroke-width="1.5"/>';
-var GL=function(a){return '<ellipse class="gl" '+a+' fill="none" stroke="#fff" stroke-width="3" opacity="0"/>'};
-var pads='';for(var q=0;q<8;q++)pads+='<rect x="'+(-28+q%4*15)+'" y="'+(-4+Math.floor(q/4)*7)+'" width="12" height="5" rx="1" fill="'+(q%2?'#5ee7ff':'#b08bff')+'"/>';
-var IN={
-bass:'<g transform="translate(0 -44) rotate(-30)"><rect x="8" y="-3" width="62" height="5" rx="2" fill="#3b2f2a"/><ellipse cx="-2" cy="2" rx="15" ry="10" fill="#2dd4bf"/>'+GL('cx="-2" cy="2" rx="18" ry="13"')+'</g>',
-keys:'<g transform="translate(0 -44)"><rect x="-36" y="-5" width="72" height="12" rx="3" fill="#1b1f33" stroke="#d97757"/><path d="M-32 1H32" stroke="#fff" stroke-width="8" stroke-dasharray="3 1.6" opacity=".85"/>'+GL('rx="39" ry="10" cy="1"')+'</g>',
-drums:'<g><circle cy="-16" r="17" fill="#e5e7eb" stroke="#6ee7a8" stroke-width="3"/>'+GL('cy="-16" rx="21" ry="21"')+'<ellipse cx="-30" cy="-36" rx="12" ry="4" fill="#cbd5e1"/><path d="M-30-32V-16M36-52V-18" stroke="#6b7280" stroke-width="2"/><path d="M24-52h24" stroke="#fbbf24" stroke-width="3"/></g>',
-synth:'<g transform="translate(0 -44)"><rect x="-34" y="-8" width="68" height="20" rx="4" fill="#12163a" stroke="#b08bff"/>'+pads+GL('rx="38" ry="14" cy="2"')+'</g>',
-guitar:'<g transform="translate(0 -44) scale(-1 1) rotate(-34)"><rect x="8" y="-3" width="52" height="5" rx="2" fill="#3b2f2a"/><ellipse cx="-2" cy="2" rx="13" ry="10" fill="#ff5a1f"/>'+GL('cx="-2" cy="2" rx="16" ry="13"')+'</g>'};
-IN.dj='<g transform="translate(0 -44)"><rect x="-36" y="-6" width="72" height="18" rx="4" fill="#0f1a05" stroke="#76b900"/><g class="sp"><circle cx="-17" cy="3" r="7" fill="#1b2a07" stroke="#76b900"/><path d="M-17 3h6" stroke="#b6ff3c" stroke-width="1.6"/></g><g class="sp"><circle cx="17" cy="3" r="7" fill="#1b2a07" stroke="#76b900"/><path d="M17 3h6" stroke="#b6ff3c" stroke-width="1.6"/></g><rect x="-3" y="-2" width="6" height="10" rx="1" fill="#76b900"/>'+GL('rx="39" ry="12" cy="3"')+'</g>';
-var M=[
-{n:'OPENROUTER',r:'бас',x:62,y:268,k:'orr',suit:'#0f2e36',acc:'#5eead4',skin:'#2dd4bf',i:IN.bass},
-{n:'CLAUDE',r:'клавиши',x:160,y:268,k:'cla',suit:'#f3e7d8',acc:'#d97757',skin:'#d97757',i:IN.keys},
-{n:'LOCAL',r:'ударные',x:370,y:238,s:.92,k:'local',suit:'#14532d',acc:'#6ee7a8',skin:'#9ca3af',i:IN.drums},
-{n:'GEMINI',r:'синтезатор',x:440,y:268,k:'gem',suit:'#1b2550',acc:'#8ab4ff',skin:'#8fa9ff',i:IN.synth},
-{n:'GROQ',r:'гитара',x:538,y:268,k:'gro',suit:'#161616',acc:'#ff5a1f',skin:'#ff7a45',i:IN.guitar},
-{n:'NVIDIA',r:'GPU-сэмплер',x:230,y:238,s:.92,k:'nv',suit:'#0f1a05',acc:'#76b900',skin:'#76b900',i:IN.dj}];
-function arm(x,c,cl){return '<g transform="translate('+x+' -78)"><g class="arm '+cl+'"><rect x="-4.5" y="-2" width="9" height="30" rx="4.5" fill="'+c.suit+'"/><circle cy="31" r="5.5" fill="'+c.skin+'"/></g></g>'}
-function mk(m,i){return '<g class="m" data-i="'+i+'" transform="translate('+m.x+' '+m.y+') scale('+(m.s||1)+')"><ellipse cy="1" rx="26" ry="5" fill="#000" opacity=".45"/><g class="sw"><g class="hit">'+
-'<rect x="-12" y="-40" width="9" height="36" rx="4" fill="#12172e"/><rect x="3" y="-40" width="9" height="36" rx="4" fill="#12172e"/><ellipse cx="-8" cy="-3" rx="8" ry="4" fill="'+m.acc+'"/><ellipse cx="8" cy="-3" rx="8" ry="4" fill="'+m.acc+'"/>'+
-'<rect x="-19" y="-86" width="38" height="48" rx="15" fill="'+m.suit+'"/><path d="M-12-86V-40M12-86V-40" stroke="'+m.acc+'" stroke-width="3.5"/><g transform="translate(0 -64)">'+EM[m.k]+'</g>'+
-arm(-19,m,'a0')+arm(19,m,'a1')+'<g transform="translate(0 -86)"><g class="head">'+HD[m.k]+'</g></g>'+m.i+'</g></g><text class="lb" y="15" text-anchor="middle" font-size="8.5" font-weight="700" fill="'+m.acc+'">'+m.n+' · '+m.r+'</text></g>'}
-var h='';[2,5,0,1,3,4].forEach(function(i){h+=mk(M[i],i)});document.getElementById('cast').innerHTML=h;
-var E=[];M.forEach(function(m,i){var g=document.querySelector('.m[data-i="'+i+'"]');E[i]={g:g,hit:g.querySelector('.hit'),head:g.querySelector('.head'),arm:[g.querySelector('.a0'),g.querySelector('.a1')],gl:g.querySelector('.gl'),lb:g.querySelector('.lb')};E[i].arm[0].style.transform='rotate(12deg)';E[i].arm[1].style.transform='rotate(-12deg)'});
-var b='',cw='',BN=22,bh=[];for(var i=0;i<BN;i++){bh[i]=0;b+='<rect x="'+(144+i*14)+'" width="10" rx="2" fill="url(#gSk)" y="104" height="2"/>'}
-document.getElementById('bars').innerHTML=b;var br=document.getElementById('bars').children;
-var bm='';[[100,'#5ee7ff'],[300,'#b08bff'],[500,'#ff7a45']].forEach(function(a,j){bm+='<path class="bm" d="M'+a[0]+' 0L'+(a[0]-60)+' 242L'+(a[0]+60)+' 242Z" fill="'+a[1]+'" style="animation-delay:'+j*.4+'s"/>'});document.getElementById('beams').innerHTML=bm;
-for(var i=0;i<18;i++)cw+='<circle class="cr" cx="'+(18+i*33)+'" cy="304" r="10" style="animation-delay:'+(i%5)*.1+'s"/>';document.getElementById('crowd').innerHTML=cw;
-function ann(el,f,d){el.animate(f,{duration:d})}
-function bump(s){for(var k=0;k<4;k++){var j=Math.floor(Math.random()*BN);bh[j]=Math.min(1,bh[j]+.55*s)}}
-function vis(i,side,s){var e=E[i],sg=side?-1:1,R=sg*12;
-ann(e.hit,[{transform:'translateY(0)'},{transform:'translateY('+(-3*s)+'px)'},{transform:'translateY(0)'}],150);
-ann(e.arm[side],[{transform:'rotate('+R+'deg)'},{transform:'rotate('+(R+sg*50*s)+'deg)'},{transform:'rotate('+R+'deg)'}],140);
-ann(e.head,[{transform:'rotate(0deg)'},{transform:'rotate('+(side?6*s:-6*s)+'deg)'},{transform:'rotate(0deg)'}],200);
-if(e.gl)ann(e.gl,[{opacity:1},{opacity:0}],260);bump(s)}
-(function fr(){for(var i=0;i<BN;i++){bh[i]*=.9;var hh=2+bh[i]*28;br[i].setAttribute('y',106-hh);br[i].setAttribute('height',hh)}requestAnimationFrame(fr)})();
-var ac,mg,dl,iv,nt,st=0,on=false,bpm=110,mute=[0,0,0,0,0,0],nz,sv=document.getElementById('sv');
-function env(f,t,d,ty,v,lp,dest){var o=ac.createOscillator(),g=ac.createGain(),n=o;o.type=ty;o.frequency.value=f;if(lp){var q=ac.createBiquadFilter();q.type='lowpass';q.frequency.value=lp;o.connect(q);n=q}g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);n.connect(g);g.connect(dest||mg);o.start(t);o.stop(t+d+.02)}
-function nzs(t,d,hp,v){var s=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain();s.buffer=nz;f.type='highpass';f.frequency.value=hp;g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.001,t+d);s.connect(f);f.connect(g);g.connect(mg);s.start(t);s.stop(t+d+.02)}
-function kick(t){var o=ac.createOscillator(),g=ac.createGain();o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(40,t+.14);g.gain.setValueAtTime(.9,t);g.gain.exponentialRampToValueAtTime(.001,t+.25);o.connect(g);g.connect(mg);o.start(t);o.stop(t+.27)}
-var CH=[[220,261.63,329.63],[174.61,220,261.63],[261.63,329.63,392],[196,246.94,293.66]],RT=[55,43.65,65.41,49],P=[440,523.25,587.33,659.25,783.99,880],
-MEL=[[-1,-1,3,-1,-1,2,-1,-1,0,-1,-1,2,-1,3,-1,-1],[-1,-1,2,-1,-1,0,-1,-1,1,-1,-1,0,-1,2,-1,-1],[4,-1,-1,3,-1,-1,2,-1,3,-1,-1,4,-1,5,-1,-1],[3,-1,-1,2,-1,-1,1,-1,2,-1,3,-1,2,-1,0,-1]];
-function V(t,i,side,s){setTimeout(function(){vis(i,side,s)},Math.max(0,(t-ac.currentTime)*1000))}
-function sched(t,s){var bar=(s>>4)&3,k=s&15,c=CH[bar];
-if(!mute[2]){if(k==0||k==8||k==10){kick(t);V(t,2,1,1.3)}if(k==4||k==12){nzs(t,.14,1500,.32);env(190,t,.1,'triangle',.3);V(t,2,0,1.2)}if(k%2==0){nzs(t,.04,7000,.12);V(t,2,(k%4)?1:0,.6)}}
-if(!mute[0]&&[0,3,6,8,11,14].indexOf(k)>-1){env(RT[bar]*(k==6||k==14?2:1),t,.22,'sawtooth',.22,420);V(t,0,k%2,1)}
-if(!mute[1]&&(k==0||k==6||k==10)){c.forEach(function(f){env(f,t,k?.28:.7,'triangle',.07)});V(t,1,k%2,1)}
-if(!mute[4]&&k%2==0){env(c[(k>>1)%3]*2,t,.14,'sawtooth',.06,2600);V(t,4,(k>>1)%2,.8)}
-if(!mute[5]){if([2,5,7,13,15].indexOf(k)>-1){env(c[k%3]*4,t,.07,'square',.035,5000);V(t,5,k%2,.9)}if(bar==3&&k==14){nzs(t,.18,3000,.14);V(t,5,0,1.3)}}
-var m=MEL[bar][k];if(!mute[3]&&m>=0){env(P[m],t,.3,'square',.04,3000,dl);env(P[m],t,.3,'sine',.07);V(t,3,k%2,1)}}
-function setB(){sv.style.setProperty('--b',(60/bpm)+'s');if(dl)dl.delayTime.value=60/bpm*.75}
-function init(){if(ac)return;ac=new(window.AudioContext||window.webkitAudioContext)();var cp=ac.createDynamicsCompressor();mg=ac.createGain();mg.gain.value=.6;mg.connect(cp);cp.connect(ac.destination);
-dl=ac.createDelay(1);var fb=ac.createGain();fb.gain.value=.33;dl.connect(fb);fb.connect(dl);dl.connect(mg);
-nz=ac.createBuffer(1,ac.sampleRate*.2,ac.sampleRate);var d=nz.getChannelData(0);for(var i=0;i<d.length;i++)d[i]=Math.random()*2-1}
-var pb=document.getElementById('pb');
-pb.onclick=function(){if(!on){init();ac.resume();setB();st=0;nt=ac.currentTime+.1;iv=setInterval(function(){while(nt<ac.currentTime+.25){sched(nt,st++);nt+=60/bpm/4}},60);on=true;sv.classList.add('on');pb.textContent='■ Стоп'}
-else{clearInterval(iv);on=false;sv.classList.remove('on');pb.textContent='▶ Играть'}};
-document.getElementById('bp').oninput=function(e){bpm=+e.target.value;document.getElementById('bv').textContent=bpm;setB()};
-sv.addEventListener('click',function(e){var g=e.target.closest&&e.target.closest('.m');if(!g)return;var i=+g.dataset.i;mute[i]=mute[i]?0:1;g.classList.toggle('mu',!!mute[i])});
-setB();
-})();
-</script>
 </body>
 </html>
