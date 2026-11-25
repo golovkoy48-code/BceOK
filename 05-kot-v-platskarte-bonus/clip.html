@@ -1,0 +1,1310 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Кот уехал в плацкарте · AI Band (Скелетик)</title>
+  <!-- Подключение Tailwind CSS для адаптивного UI -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Подключение Three.js (r128) и OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- Шрифт Inter и акцентный моноширинный шрифт -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #09090b;
+      color: #f4f4f5;
+      font-family: 'Inter', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Контейнер вьюпорта с поддержкой 16:9 и 9:16 */
+    #viewport-wrapper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #18181b 0%, #050507 100%);
+    }
+    #canvas-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+      overflow: hidden;
+      box-shadow: 0 0 60px rgba(239, 68, 68, 0.18);
+    }
+    #canvas-container.portrait-mode {
+      width: min(92vw, calc(92vh * 9 / 16));
+      height: min(92vh, calc(92vw * 16 / 9));
+      border-radius: 24px;
+      border: 2px solid rgba(244, 63, 94, 0.45);
+    }
+    canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+    /* Кастомные слайдеры */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.12);
+      height: 6px;
+      border-radius: 999px;
+      outline: none;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #f43f5e;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(244, 63, 94, 0.8);
+    }
+    /* Пульсация индикатора записи */
+    @keyframes recPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(1.2); }
+    }
+    .rec-dot {
+      animation: recPulse 1s infinite ease-in-out;
+    }
+    /* Эффект виньетки и хроматической окантовки */
+    .cinema-vignette {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at center, transparent 58%, rgba(0, 0, 0, 0.72) 100%);
+    }
+  </style>
+</head>
+<body>
+  <div id="viewport-wrapper">
+    <div id="canvas-container">
+      <!-- Three.js рендер-контейнер -->
+      <div id="three-root" class="w-full h-full"></div>
+      <div class="cinema-vignette"></div>
+
+      <!-- Верхняя панель HUD: Заголовок, BPM, Секция и Кнопка записи -->
+      <div class="absolute top-3 left-3 right-3 sm:top-5 sm:left-5 sm:right-5 flex flex-wrap items-center justify-between gap-2 z-20 pointer-events-none">
+        <!-- Блок метаданных трека -->
+        <div class="pointer-events-auto bg-zinc-950/80 backdrop-blur-md border border-zinc-800/90 rounded-2xl px-3.5 py-2 flex items-center gap-3 shadow-xl">
+          <div id="beat-led" class="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_12px_#f43f5e] transition-transform duration-75"></div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="text-xs sm:text-sm font-black tracking-wide uppercase text-white">Кот уехал в плацкарте</h1>
+              <span class="text-[10px] font-mono-tech px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold">ROCK 136 BPM</span>
+            </div>
+            <div class="flex items-center gap-2 text-[11px] text-zinc-400 font-mono-tech mt-0.5">
+              <span id="section-badge" class="text-amber-400 font-bold">INTRO // 00:00</span>
+              <span>•</span>
+              <span id="vocal-source-label">Синт-Вокал (WebAudio)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Правый блок: Формат кадра, загрузка аудио и запись WebM -->
+        <div class="pointer-events-auto flex items-center gap-2 flex-wrap">
+          <!-- Переключатель 16:9 / 9:16 -->
+          <button id="btn-aspect" class="bg-zinc-900/85 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/80 rounded-xl px-3 py-2 text-xs font-mono-tech font-bold transition flex items-center gap-1.5 shadow-lg">
+            <span id="aspect-icon">▭</span>
+            <span id="aspect-label">16:9</span>
+          </button>
+
+          <!-- Кнопка загрузки пользовательского MP3/WAV вокала -->
+          <label class="cursor-pointer bg-zinc-900/85 hover:bg-zinc-800 text-zinc-200 border border-zinc-700/80 rounded-xl px-3 py-2 text-xs font-semibold transition flex items-center gap-1.5 shadow-lg" title="Загрузить свой трек/вокал (MP3/WAV) для синхронизации">
+            <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span class="hidden sm:inline">Загрузить вокал</span>
+            <input id="audio-upload" type="file" accept="audio/*" class="hidden" />
+          </label>
+
+          <!-- Кнопка записи WebM -->
+          <button id="btn-record" class="bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-400/40 rounded-xl px-3 py-2 text-xs font-bold transition flex items-center gap-2 shadow-lg">
+            <span id="rec-indicator" class="w-2.5 h-2.5 rounded-full bg-white"></span>
+            <span id="rec-label">Запись WebM</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Блок живых субтитров и текущего солиста -->
+      <div class="absolute bottom-36 sm:bottom-32 left-3 right-3 flex flex-col items-center justify-center pointer-events-none z-20 px-2">
+        <div id="soloist-pill" class="mb-2 px-3 py-1 rounded-full bg-zinc-950/85 border border-rose-500/40 text-[11px] font-mono-tech font-bold tracking-wider uppercase text-rose-300 shadow-lg transition-all">
+          СОЛИСТ: LOCAL (ГЛАВНЫЙ КОТ)
+        </div>
+        <div id="subtitle-box" class="max-w-2xl text-center bg-zinc-950/75 backdrop-blur-md border border-zinc-800/80 rounded-2xl px-4 py-2.5 shadow-2xl transition-all duration-200">
+          <p id="subtitle-main" class="text-sm sm:text-lg font-extrabold text-white tracking-tight leading-snug">
+            Нажми PLAY — поезд трогается на полных оборотах!
+          </p>
+          <p id="subtitle-sub" class="text-[11px] sm:text-xs font-mono-tech text-zinc-400 mt-0.5">
+            [Двухканальный синтез 136 BPM • Перегруженный дисторшн + Плацкарт 3D]
+          </p>
+        </div>
+      </div>
+
+      <!-- Нижняя консоль управления (Транспорт, Микшер, Камера, Солисты) -->
+      <div class="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-5 sm:right-5 z-20 bg-zinc-950/85 backdrop-blur-xl border border-zinc-800/90 rounded-2xl p-2.5 sm:p-3 shadow-2xl flex flex-col gap-2.5">
+        <!-- Полоса прогресса таймлайна -->
+        <div class="flex items-center gap-2.5">
+          <span id="time-current" class="text-[11px] font-mono-tech text-zinc-400 w-10 text-right">0:00</span>
+          <div id="timeline-bar" class="relative flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden cursor-pointer group">
+            <div id="timeline-progress" class="h-full bg-gradient-to-r from-rose-500 via-amber-500 to-rose-400 w-0 transition-all duration-75"></div>
+          </div>
+          <span id="time-total" class="text-[11px] font-mono-tech text-zinc-400 w-10">1:10</span>
+        </div>
+
+        <!-- Ряд кнопок и фейдеров -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <!-- Левый блок: Play/Pause, Стоп и Авто-камера -->
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <button id="btn-play" class="bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-bold rounded-xl px-4 py-2 text-xs sm:text-sm flex items-center gap-1.5 transition shadow-md shadow-rose-600/30">
+              <span id="play-icon">▶</span>
+              <span id="play-text">PLAY</span>
+            </button>
+            <button id="btn-stop" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl px-2.5 py-2 text-xs font-mono-tech transition" title="В начало">
+              ■
+            </button>
+            <button id="btn-autocam" class="bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 rounded-xl px-2.5 py-2 text-xs font-semibold transition flex items-center gap-1">
+              <span>🎥</span>
+              <span id="autocam-label">Авто-камера: ВКЛ</span>
+            </button>
+          </div>
+
+          <!-- Центральный блок: Двухканальный микшер -->
+          <div class="flex items-center gap-3 sm:gap-4 bg-zinc-900/90 border border-zinc-800 rounded-xl px-3 py-1.5">
+            <div class="flex items-center gap-1.5">
+              <span class="text-[11px] font-mono-tech text-rose-400 font-bold">🎤 Вокал/Лид</span>
+              <input id="vol-vocal" type="range" min="0" max="1" step="0.01" value="0.85" class="w-16 sm:w-20" />
+            </div>
+            <div class="w-px h-4 bg-zinc-700"></div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[11px] font-mono-tech text-amber-400 font-bold">🎸 Рок-микс</span>
+              <input id="vol-music" type="range" min="0" max="1" step="0.01" value="0.80" class="w-16 sm:w-20" />
+            </div>
+          </div>
+
+          <!-- Правый блок: Селектор солистов -->
+          <div class="flex items-center gap-1 overflow-x-auto max-w-full pb-0.5 sm:pb-0" id="soloist-buttons">
+            <button data-soloist="AUTO" class="solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-rose-600 text-white border border-rose-400/50 transition">AUTO</button>
+            <button data-soloist="LOCAL" class="solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition">LOCAL</button>
+            <button data-soloist="GEMINI" class="solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition">GEMINI</button>
+            <button data-soloist="GROQ" class="solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition">GROQ</button>
+            <button data-soloist="OPENROUTER" class="solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition">ROUTER</button>
+            <button data-soloist="CLAUDE" class="solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition">CLAUDE</button>
+            <button data-soloist="NVIDIA" class="solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition">NVIDIA</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Всплывающее системное уведомление (без alert) -->
+      <div id="toast-msg" class="fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/95 border border-rose-500/50 text-white px-4 py-2 rounded-xl text-xs font-mono-tech shadow-2xl opacity-0 pointer-events-none transition-opacity duration-300">
+        Сообщение
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 1. ТАЙМИНГ-МАНИФЕСТ ТРЕКА (AUDIO-BLINDNESS BYPASS CONTRACT)
+     * Жесткая сетка 136 BPM, размер 4/4, длительность 70.58 секунд (40 тактов).
+     * ============================================================================
+     */
+    const BPM = 136;
+    const BEAT_DURATION = 60 / BPM; // ~0.44117 сек на долю
+    const BAR_DURATION = BEAT_DURATION * 4; // ~1.7647 сек на такт
+    const TOTAL_BARS = 40;
+    const TOTAL_DURATION = TOTAL_BARS * BAR_DURATION; // ~70.59 сек
+
+    // Карта персонажей-рокеров (6 участников группы в плацкарте)
+    const BAND_MEMBERS = [
+      { id: 'LOCAL',      name: 'LOCAL (Кот-Фронтмен)',    color: 0xf43f5e, hex: '#f43f5e', role: 'Экстрим-вокал и лидер-гитара', pos: [0, 0, -1.2],   rotY: 0 },
+      { id: 'GEMINI',     name: 'GEMINI (Соло-Гитар)',     color: 0x38bdf8, hex: '#38bdf8', role: 'Неоновые запилы на верхней полке', pos: [-1.45, 1.15, -2.6], rotY: 0.45 },
+      { id: 'GROQ',       name: 'GROQ (Ультра-Бас)',       color: 0xf97316, hex: '#f97316', role: 'Сверхбыстрый слэп-бас', pos: [1.45, 0, -2.5],     rotY: -0.45 },
+      { id: 'OPENROUTER', name: 'OPENROUTER (Ритм-Рифф)',  color: 0xa855f7, hex: '#a855f7', role: 'Кросс-маршрутизация дисторшна', pos: [-1.45, 0, -4.4],    rotY: 0.35 },
+      { id: 'CLAUDE',     name: 'CLAUDE (Акустика & Лирика)', color: 0xfbbf24, hex: '#fbbf24', role: 'Балладный бридж и подстаканник', pos: [1.45, 1.15, -4.4],  rotY: -0.35 },
+      { id: 'NVIDIA',     name: 'NVIDIA (Тензор-Ударные)', color: 0x22c55e, hex: '#22c55e', role: 'Кардан на 136 BPM с трассировкой', pos: [0, 0.15, -6.0],     rotY: 0 }
+    ];
+
+    // Таймлайн секций, субтитров и автоматического переключения солистов
+    const TIMELINE_SECTIONS = [
+      {
+        startBar: 0, endBar: 4,
+        label: 'INTRO // РАЗГОН СОСТАВА',
+        soloist: 'NVIDIA',
+        camPreset: 'WIDE_CARRIAGE',
+        lyricMain: 'Ту-дух, ту-дух! Рельсы искрят под 136 BPM!',
+        lyricSub: '[Вступление: ударная установка NVIDIA задает темп плацкарта]'
+      },
+      {
+        startBar: 4, endBar: 12,
+        label: 'КУПЛЕТ 1 // БИЛЕТ В ОДИН КОНЕЦ',
+        soloist: 'LOCAL',
+        camPreset: 'FRONTMAN_LOW',
+        lyricMain: 'Кот взял билет на боковушку у туалета — и врубил перегруз!',
+        lyricSub: 'В подстаканнике кипит энергетик, за окном мелькает ночной блюз!'
+      },
+      {
+        startBar: 12, endBar: 20,
+        label: 'ПРИПЕВ 1 // КОТ УЕХАЛ В ПЛАЦКАРТЕ!',
+        soloist: 'GEMINI',
+        camPreset: 'TOP_BUNK_ACTION',
+        lyricMain: 'КОТ УЕХАЛ В ПЛАЦКАРТЕ! РВЁТ СТРУНЫ НА ВЕРХНЕЙ ПОЛКЕ!',
+        lyricSub: 'Вагон качает в такт риффам — проводница в полном восторге!'
+      },
+      {
+        startBar: 20, endBar: 28,
+        label: 'КУПЛЕТ 2 // РОК-КОНЦЕРТ В ВАГОНЕ №7',
+        soloist: 'GROQ',
+        camPreset: 'BASS_GROOVE',
+        lyricMain: 'Бас качает так, что с полки падает варёное яйцо и курица гриль!',
+        lyricSub: 'Маршрутизатор OpenRouter раздаёт дисторшн на весь ночной штиль!'
+      },
+      {
+        startBar: 28, endBar: 34,
+        label: 'ГИТАРНОЕ СОЛО // ШРЕД В ТАМБУРЕ',
+        soloist: 'OPENROUTER',
+        camPreset: 'ORBIT_SOLO',
+        lyricMain: '⚡ БЕЗУМНОЕ СОЛО НА ЭЛЕКТРОГИТАРЕ ПОСРЕДИ НОЧНОГО ПЕРЕГОНА! ⚡',
+        lyricSub: '[Синхронизация стробоскопов и искр за окном вагона]'
+      },
+      {
+        startBar: 34, endBar: 40,
+        label: 'ФИНАЛ // ПОЛНЫЙ ХОД',
+        soloist: 'CLAUDE',
+        camPreset: 'FINALE_SWEEP',
+        lyricMain: 'Кот уехал в плацкарте — и этот поезд уже не остановить!',
+        lyricSub: 'Финальный аккорд! Все 6 участников на сцене вагона.'
+      }
+    ];
+
+    /**
+     * ============================================================================
+     * 2. ДВУХКАНАЛЬНЫЙ РОК-АУДИОДВИЖОК (WEB AUDIO API + ПОДДЕРЖКА СВОЕГО MP3/WAV)
+     * Канал А: Вокал / Формантный Лид (или загруженный пользователем аудиофайл)
+     * Канал Б: Процедурный Рок-Инструментал (Overdrive Guitar + Bass + Drums)
+     * ============================================================================
+     */
+    class RockAudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.isPlaying = false;
+        this.startTime = 0;
+        this.pauseOffset = 0;
+        this.schedulerTimer = null;
+        this.nextStepTime = 0;
+        this.currentStep = 0; // 16-е доли (4 шага на удар, 16 шагов на такт)
+
+        // Шины микшера
+        this.vocalGain = null;
+        this.musicGain = null;
+        this.masterGain = null;
+        this.analyser = null;
+        this.freqData = null;
+
+        // Внешний загруженный вокальный трек
+        this.customAudioBuffer = null;
+        this.customBufferSource = null;
+        this.isCustomVocalActive = false;
+
+        // Для записи видео+аудио в WebM
+        this.mediaStreamDest = null;
+
+        // Кривая дисторшна для рок-гитары
+        this.distortionCurve = this.makeDistortionCurve(240);
+      }
+
+      init() {
+        if (this.ctx) return;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioCtx();
+
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.9;
+
+        this.vocalGain = this.ctx.createGain();
+        this.vocalGain.gain.value = parseFloat(document.getElementById('vol-vocal').value);
+
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.value = parseFloat(document.getElementById('vol-music').value);
+
+        // Анализатор для реактивной подсветки сцены
+        this.analyser = this.ctx.createAnalyser();
+        this.analyser.fftSize = 128;
+        this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
+
+        // Выход для записи WebM
+        this.mediaStreamDest = this.ctx.createMediaStreamDestination();
+
+        this.vocalGain.connect(this.masterGain);
+        this.musicGain.connect(this.masterGain);
+        this.masterGain.connect(this.analyser);
+        this.analyser.connect(this.ctx.destination);
+        this.masterGain.connect(this.mediaStreamDest);
+      }
+
+      makeDistortionCurve(amount) {
+        const k = typeof amount === 'number' ? amount : 50;
+        const n_samples = 44100;
+        const curve = new Float32Array(n_samples);
+        const deg = Math.PI / 180;
+        for (let i = 0; i < n_samples; ++i) {
+          const x = (i * 2) / n_samples - 1;
+          curve[i] = ((3 + k) * x * 20 * deg) / (Math.PI + k * Math.abs(x));
+        }
+        return curve;
+      }
+
+      async loadCustomVocalFile(file) {
+        this.init();
+        const arrayBuffer = await file.arrayBuffer();
+        this.customAudioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+        this.isCustomVocalActive = true;
+        if (this.isPlaying) {
+          const pos = this.getCurrentTime();
+          this.stop(false);
+          this.play(pos);
+        }
+      }
+
+      play(offset = this.pauseOffset) {
+        this.init();
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        if (this.isPlaying) return;
+
+        this.isPlaying = true;
+        this.pauseOffset = offset;
+        this.startTime = this.ctx.currentTime - offset;
+
+        const stepDuration = BEAT_DURATION / 4; // 16-я нота
+        this.currentStep = Math.floor(offset / stepDuration);
+        this.nextStepTime = this.ctx.currentTime;
+
+        // Если загружен пользовательский вокальный файл — запускаем его синхронно
+        if (this.isCustomVocalActive && this.customAudioBuffer) {
+          this.customBufferSource = this.ctx.createBufferSource();
+          this.customBufferSource.buffer = this.customAudioBuffer;
+          this.customBufferSource.connect(this.vocalGain);
+          if (offset < this.customAudioBuffer.duration) {
+            this.customBufferSource.start(0, offset);
+          }
+        }
+
+        this.schedulerTimer = setInterval(() => this.schedule(), 25);
+      }
+
+      pause() {
+        if (!this.isPlaying) return;
+        this.pauseOffset = this.getCurrentTime();
+        this.isPlaying = false;
+        clearInterval(this.schedulerTimer);
+        if (this.customBufferSource) {
+          try { this.customBufferSource.stop(); } catch (e) {}
+          this.customBufferSource = null;
+        }
+      }
+
+      stop(resetOffset = true) {
+        this.isPlaying = false;
+        clearInterval(this.schedulerTimer);
+        if (this.customBufferSource) {
+          try { this.customBufferSource.stop(); } catch (e) {}
+          this.customBufferSource = null;
+        }
+        if (resetOffset) {
+          this.pauseOffset = 0;
+          this.currentStep = 0;
+        }
+      }
+
+      seek(newTime) {
+        const clamped = Math.max(0, Math.min(TOTAL_DURATION - 0.05, newTime));
+        const wasPlaying = this.isPlaying;
+        this.stop(false);
+        this.pauseOffset = clamped;
+        if (wasPlaying) {
+          this.play(clamped);
+        }
+      }
+
+      getCurrentTime() {
+        if (!this.isPlaying) return this.pauseOffset;
+        const elapsed = this.ctx.currentTime - this.startTime;
+        if (elapsed >= TOTAL_DURATION) {
+          // Зацикливание или остановка в конце клипа
+          this.seek(0);
+          return 0;
+        }
+        return elapsed;
+      }
+
+      getAudioEnergy() {
+        if (!this.analyser || !this.isPlaying) return { bass: 0, mid: 0, high: 0 };
+        this.analyser.getByteFrequencyData(this.freqData);
+        let bass = 0, mid = 0, high = 0;
+        for (let i = 0; i < 10; i++) bass += this.freqData[i];
+        for (let i = 10; i < 32; i++) mid += this.freqData[i];
+        for (let i = 32; i < 64; i++) high += this.freqData[i];
+        return {
+          bass: bass / (10 * 255),
+          mid: mid / (22 * 255),
+          high: high / (32 * 255)
+        };
+      }
+
+      schedule() {
+        const lookahead = 0.12;
+        const stepDuration = BEAT_DURATION / 4;
+
+        while (this.nextStepTime < this.ctx.currentTime + lookahead) {
+          this.triggerStep(this.currentStep, this.nextStepTime, stepDuration);
+          this.nextStepTime += stepDuration;
+          this.currentStep++;
+        }
+      }
+
+      // Генерация рок-партий по сетке 16-х долей
+      triggerStep(step, time, stepDur) {
+        const stepInBar = step % 16;
+        const barIndex = Math.floor(step / 16) % TOTAL_BARS;
+
+        // 1. РОК-УДАРНЫЕ (Кик, Рабочий барабан, Хай-хэт / Крэш)
+        // Кик на 0, 3, 6, 8, 10, 14 (драйвовый панк/хард-рок грув)
+        if ([0, 3, 6, 8, 10, 14].includes(stepInBar)) {
+          this.playKick(time);
+        }
+        // Рабочий барабан (Snare) на 4 и 12 (сильные бэкбиты)
+        if (stepInBar === 4 || stepInBar === 12) {
+          this.playSnare(time);
+        }
+        // Хай-хэт каждые 8-е доли (0, 2, 4, 6...)
+        if (stepInBar % 2 === 0) {
+          this.playHiHat(time, stepInBar === 0 && barIndex % 4 === 0);
+        }
+
+        // 2. РОК-БАС И ПЕРЕГРУЖЕННАЯ ЭЛЕКТРОГИТАРА (Ритм-рифф в E minor / Drop D)
+        // Прогрессия аккордов по тактам: E5 -> G5 -> A5 -> C5/B5
+        const chordRoots = [82.41, 98.00, 110.00, 130.81]; // E2, G2, A2, C3
+        const rootFreq = chordRoots[barIndex % 4];
+
+        // Палм-мьют чёс на 8-х долях + открытые пауэр-аккорды на акцентах
+        if (stepInBar % 2 === 0) {
+          const isAccent = [0, 6, 8, 12].includes(stepInBar);
+          this.playBass(time, rootFreq, isAccent ? stepDur * 1.8 : stepDur * 0.9);
+          if (barIndex >= 2) { // Гитара вступает со 3-го такта разгона
+            this.playDistortedGuitar(time, rootFreq * 2, isAccent ? stepDur * 2.2 : stepDur * 0.7, isAccent);
+          }
+        }
+
+        // 3. СИНТЕЗИРОВАННЫЙ ВОКАЛЬНЫЙ ЛИД (если не загружен внешний аудиофайл)
+        if (!this.isCustomVocalActive && barIndex >= 4) {
+          this.triggerVocalSynthMelody(barIndex, stepInBar, time, stepDur);
+        }
+      }
+
+      playKick(time) {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(145, time);
+        osc.frequency.exponentialRampToValueAtTime(38, time + 0.14);
+
+        gain.gain.setValueAtTime(0.95, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + 0.22);
+
+        osc.connect(gain);
+        gain.connect(this.musicGain);
+        osc.start(time);
+        osc.stop(time + 0.23);
+      }
+
+      playSnare(time) {
+        // Шумовой хлопок пружины
+        const bufferSize = this.ctx.sampleRate * 0.18;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.value = 900;
+
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.65, time);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, time + 0.17);
+
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(this.musicGain);
+        noise.start(time);
+
+        // Тело барабана
+        const osc = this.ctx.createOscillator();
+        const oscGain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(190, time);
+        osc.frequency.exponentialRampToValueAtTime(85, time + 0.1);
+        oscGain.gain.setValueAtTime(0.5, time);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, time + 0.12);
+        osc.connect(oscGain);
+        oscGain.connect(this.musicGain);
+        osc.start(time);
+        osc.stop(time + 0.13);
+      }
+
+      playHiHat(time, isCrash) {
+        const dur = isCrash ? 0.55 : 0.06;
+        const bufferSize = Math.floor(this.ctx.sampleRate * dur);
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.value = isCrash ? 4500 : 7500;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(isCrash ? 0.35 : 0.18, time);
+        gain.gain.exponentialRampToValueAtTime(0.005, time + dur);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.musicGain);
+        noise.start(time);
+      }
+
+      playBass(time, freq, duration) {
+        const osc = this.ctx.createOscillator();
+        const filter = this.ctx.createBiquadFilter();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(freq, time);
+
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(420, time);
+        filter.frequency.exponentialRampToValueAtTime(140, time + duration);
+
+        gain.gain.setValueAtTime(0.55, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.musicGain);
+        osc.start(time);
+        osc.stop(time + duration + 0.02);
+      }
+
+      playDistortedGuitar(time, rootFreq, duration, isOpenPowerChord) {
+        // Пауэр-аккорд (тоника + квинта)
+        const freqs = [rootFreq, rootFreq * 1.498];
+        const shaper = this.ctx.createWaveShaper();
+        shaper.curve = this.distortionCurve;
+        shaper.oversample = '2x';
+
+        const cabFilter = this.ctx.createBiquadFilter();
+        cabFilter.type = 'lowpass';
+        cabFilter.frequency.setValueAtTime(isOpenPowerChord ? 2600 : 950, time);
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(isOpenPowerChord ? 0.24 : 0.14, time);
+        gain.gain.exponentialRampToValueAtTime(0.005, time + duration);
+
+        freqs.forEach(f => {
+          const osc = this.ctx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(f, time);
+          osc.connect(shaper);
+          osc.start(time);
+          osc.stop(time + duration + 0.02);
+        });
+
+        shaper.connect(cabFilter);
+        cabFilter.connect(gain);
+        gain.connect(this.musicGain);
+      }
+
+      triggerVocalSynthMelody(barIndex, stepInBar, time, stepDur) {
+        // Минорная пентатоника (E4, G4, A4, B4, D5, E5) для вокальной линии и шред-соло
+        const scale = [329.63, 392.00, 440.00, 493.88, 587.33, 659.25, 783.99];
+        const isSoloSection = barIndex >= 28 && barIndex < 34;
+
+        // В соло играем быстрыми 16-ми, в куплете/припеве — вокальной фразировкой
+        if (!isSoloSection && stepInBar % 2 !== 0) return;
+        if (!isSoloSection && [6, 14].includes(stepInBar)) return; // Паузы для дыхания вокалиста
+
+        const noteIdx = (barIndex * 3 + Math.floor(stepInBar / (isSoloSection ? 1 : 2))) % scale.length;
+        const freq = scale[noteIdx] * (isSoloSection ? 1.5 : 1.0);
+        const dur = isSoloSection ? stepDur * 1.1 : stepDur * 1.85;
+
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        osc1.type = 'sawtooth';
+        osc2.type = 'square';
+        osc1.frequency.setValueAtTime(freq, time);
+        osc2.frequency.setValueAtTime(freq * 1.006, time); // Легкий детюн/хорус
+
+        // Формантный полосовой фильтр, имитирующий тембр рок-вокала
+        const formant = this.ctx.createBiquadFilter();
+        formant.type = 'bandpass';
+        formant.frequency.setValueAtTime(isSoloSection ? 1800 : 1150, time);
+        formant.Q.value = 2.4;
+
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.001, time);
+        gain.gain.linearRampToValueAtTime(0.32, time + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.005, time + dur);
+
+        osc1.connect(formant);
+        osc2.connect(formant);
+        formant.connect(gain);
+        gain.connect(this.vocalGain);
+
+        osc1.start(time);
+        osc2.start(time);
+        osc1.stop(time + dur + 0.02);
+        osc2.stop(time + dur + 0.02);
+      }
+    }
+
+    /**
+     * ============================================================================
+     * 3. 3D-СЦЕНА ПЛАЦКАРТНОГО ВАГОНА И РОК-ГРУППЫ (THREE.JS)
+     * ============================================================================
+     */
+    const container = document.getElementById('three-root');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x06060a);
+    scene.fog = new THREE.FogExp2(0x06060a, 0.065);
+
+    const camera = new THREE.PerspectiveCamera(58, container.clientWidth / container.clientHeight, 0.1, 100);
+    camera.position.set(0, 1.45, 2.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.target.set(0, 1.0, -2.5);
+    controls.maxDistance = 6.5;
+    controls.minDistance = 1.0;
+
+    // Освещение вагона (Сценические софиты + пролетающие огни за окнами)
+    const ambientLight = new THREE.AmbientLight(0x1e1b4b, 0.7);
+    scene.add(ambientLight);
+    scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x1a1030, 0.6));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 0.9); keyLight.position.set(2, 4, 5); scene.add(keyLight);
+    const violetLight = new THREE.PointLight(0xb08bff, 1.6, 9); violetLight.position.set(1.4, 2.1, -3.0); scene.add(violetLight);
+
+    const spotMain = new THREE.SpotLight(0xf43f5e, 3.2, 16, Math.PI / 4, 0.5);
+    spotMain.position.set(0, 2.55, 0.5);
+    spotMain.target.position.set(0, 0.5, -2.5);
+    scene.add(spotMain);
+    scene.add(spotMain.target);
+
+    const spotAccent = new THREE.PointLight(0x38bdf8, 2.2, 10);
+    spotAccent.position.set(-1.2, 2.1, -3.5);
+    scene.add(spotAccent);
+
+    const windowPassingLight = new THREE.PointLight(0xfbbf24, 3.5, 9);
+    windowPassingLight.position.set(3.2, 1.4, -2.0);
+    scene.add(windowPassingLight);
+
+    // Построение интерьера плацкартного вагона
+    const carriageGroup = new THREE.Group();
+    scene.add(carriageGroup);
+
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.4, metalness: 0.6 });
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.6, metalness: 0.3 });
+    const bunkMat = new THREE.MeshStandardMaterial({ color: 0x7f1d1d, roughness: 0.7 }); // Бордовые дерматиновые полки РЖД/УЗ
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0xd4d4d8, roughness: 0.25, metalness: 0.85 });
+
+    // Пол и потолок вагона
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.1, 14), floorMat);
+    floor.position.set(0, -0.05, -3);
+    carriageGroup.add(floor);
+
+    const ceiling = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.15, 14), wallMat);
+    ceiling.position.set(0, 2.75, -3);
+    carriageGroup.add(ceiling);
+
+    // Светодиодные рок-полосы вдоль потолка
+    const neonStripMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
+    [-0.85, 0.85].forEach(xPos => {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 13), neonStripMat);
+      strip.position.set(xPos, 2.66, -3);
+      carriageGroup.add(strip);
+    });
+
+    // Секции плацкарта: полки, столики и оконные рамы
+    for (let z = 0; z >= -7.5; z -= 2.5) {
+      // Нижние и верхние полки слева и справа
+      [-1.35, 1.35].forEach(sideX => {
+        const lowerBunk = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.14, 1.8), bunkMat);
+        lowerBunk.position.set(sideX, 0.48, z - 0.8);
+        carriageGroup.add(lowerBunk);
+
+        const upperBunk = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.12, 1.8), bunkMat);
+        upperBunk.position.set(sideX, 1.55, z - 0.8);
+        carriageGroup.add(upperBunk);
+
+      });
+
+      // Оконные проемы и простенки
+      [-1.88, 1.88].forEach(wallX => {
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 2.75, 0.55), wallMat);
+        pillar.position.set(wallX, 1.35, z);
+        carriageGroup.add(pillar);
+
+        const lowerWall = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.85, 2.0), wallMat);
+        lowerWall.position.set(wallX, 0.42, z - 1.25);
+        carriageGroup.add(lowerWall);
+      });
+    }
+
+    // Движущийся ночной пейзаж за окнами (столбы ЛЭП, огни полустанков, искры)
+    const outsideObjects = [];
+    const poleGeo = new THREE.BoxGeometry(0.12, 5.5, 0.12);
+    const poleMat = new THREE.MeshBasicMaterial({ color: 0x3f3f46 });
+    const lightOrbGeo = new THREE.SphereGeometry(0.16, 8, 8);
+
+    for (let i = 0; i < 24; i++) {
+      const side = i % 2 === 0 ? 3.6 : -3.6;
+      const zPos = -i * 2.5 + 8;
+
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(side, 1.5, zPos);
+      scene.add(pole);
+      outsideObjects.push({ mesh: pole, speed: 26 });
+
+      if (i % 3 === 0) {
+        const orbMat = new THREE.MeshBasicMaterial({ color: i % 6 === 0 ? 0xfbbf24 : 0xf43f5e });
+        const orb = new THREE.Mesh(lightOrbGeo, orbMat);
+        orb.position.set(side * 1.15, 1.3 + Math.sin(i) * 0.4, zPos);
+        scene.add(orb);
+        outsideObjects.push({ mesh: orb, speed: 26 });
+      }
+    }
+
+    // ===== СКЕЛЕТИК: 3D-образы ИИ (один скелет, 6 образов из клипов) =====
+    const characterMeshes = {};
+    const PI = Math.PI, SK = 0.72, KK = 0.0105, H0 = 0.95, HC = 0.225;
+    // Сцена в проходе вагона: фронтмен впереди, ударные в глубине
+    const STAGE = { LOCAL:[0,0,-1.6,0], GEMINI:[-0.97,1.61,-2.9,0.9,1], OPENROUTER:[-0.97,0.55,-3.7,0.9,1], CLAUDE:[0.97,1.61,-3.7,-0.9,1], GROQ:[0.97,0.55,-2.9,-0.9,1], NVIDIA:[0,0,-4.8,0] }; // 5-й элемент: сидит на полке
+    const CHAR_STYLE = {
+      LOCAL:      { i:0, suit:0x15803d, suit2:0x052e16, pants:0x111827, acc:0x4ade80, trim:0xfacc15, skin:0xd1d5db, shoe:0xf8fafc, metal:0.35 },
+      GEMINI:     { i:1, suit:0x2563eb, suit2:0x4f46e5, pants:0x1e1b4b, acc:0x38bdf8, trim:0xc084fc, skin:0x93c5fd, shoe:0xe0e7ff, metal:0.42 },
+      CLAUDE:     { i:2, suit:0xf59e0b, suit2:0xb45309, pants:0x292524, acc:0xfef08a, trim:0xfb7185, skin:0xfb923c, shoe:0xffffff, metal:0.28 },
+      GROQ:       { i:3, suit:0xea580c, suit2:0x9a3412, pants:0x18181b, acc:0xfde047, trim:0xf43f5e, skin:0xff7a45, shoe:0xfb923c, metal:0.45 },
+      OPENROUTER: { i:4, suit:0x0d9488, suit2:0x115e59, pants:0x0f172a, acc:0x2dd4bf, trim:0xa855f7, skin:0x5eead4, shoe:0xccfbf1, metal:0.38 },
+      NVIDIA:     { i:5, suit:0x4d7c0f, suit2:0x1a2e05, pants:0x090d04, acc:0xa3e635, trim:0x22c55e, skin:0x84cc16, shoe:0xd9f99d, metal:0.48 }
+    };
+    function mS(c, r, met) { return new THREE.MeshStandardMaterial({ color: c, roughness: r || 0.42, metalness: met || 0.18, side: THREE.DoubleSide }); }
+    function mB(c) { return new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide }); }
+    function put(p, g, m, x, y, z) { const o = new THREE.Mesh(g, m); o.position.set(x || 0, y || 0, z || 0); p.add(o); return o; }
+    function jnt(p, x, y, z) { const g = new THREE.Group(); g.position.set(x, y, z); p.add(g); return g; }
+    function ball(p, r, m, x, y, z) { return put(p, new THREE.SphereGeometry(r, 18, 14), m, x, y, z); }
+    function tube(p, r, len, m, x, y, z) { return put(p, new THREE.CylinderGeometry(r, r, len, 16), m, x, y, z); }
+    function ell(p, m, x, y, z, sx, sy, sz) { const o = ball(p, 1, m, x, y, z); o.scale.set(sx, sy, sz); return o; }
+    function rbox(p, w, h, d, r, m, x, y, z) {
+      const g = new THREE.BoxGeometry(w, h, d, 10, 10, 10), a = g.attributes.position, hx = w / 2 - r, hy = h / 2 - r, hz = d / 2 - r;
+      for (let i = 0; i < a.count; i++) {
+        const X = a.getX(i), Y = a.getY(i), Z = a.getZ(i), cx = Math.max(-hx, Math.min(hx, X)), cy = Math.max(-hy, Math.min(hy, Y)), cz = Math.max(-hz, Math.min(hz, Z));
+        const dx = X - cx, dy = Y - cy, dz = Z - cz, l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+        a.setXYZ(i, cx + dx / l * r, cy + dy / l * r, cz + dz / l * r);
+      }
+      g.computeVertexNormals(); return put(p, g, m, x, y, z);
+    }
+    function poly(pts, m, p, x, y, z) { const sh = new THREE.Shape(); pts.forEach((q, i) => { const X = q[0] * KK, Y = -q[1] * KK; if (i) sh.lineTo(X, Y); else sh.moveTo(X, Y); }); return put(p, new THREE.ShapeGeometry(sh), m, x, y, z); }
+    function seg(p, x1, y1, x2, y2, w, m) {
+      const dx = (x2 - x1) * KK, dy = -(y2 - y1) * KK, l = Math.sqrt(dx * dx + dy * dy);
+      const o = put(p, new THREE.BoxGeometry(l, w * KK, 0.012), m, (x1 + x2) / 2 * KK, -(y1 + y2) / 2 * KK, 0); o.rotation.z = Math.atan2(dy, dx); return o;
+    }
+    function disc(p, r, m, x, y) { return put(p, new THREE.CircleGeometry(r * KK, 16), m, x * KK, -y * KK, 0); }
+    function eyeBox(g, w, h, m, x, y, z) { return put(g, new THREE.BoxGeometry(w, h, 0.01), m, x, y, z); }
+    function gsphere(g, sx, sy, sz, c1, c2, y) {
+      const geo = new THREE.SphereGeometry(1, 28, 20), a = geo.attributes.position, col = new Float32Array(a.count * 3), A = new THREE.Color(c1), B = new THREE.Color(c2);
+      for (let i = 0; i < a.count; i++) { const t = Math.max(0, Math.min(1, (a.getX(i) - a.getY(i) + 2) / 4)), c = A.clone().lerp(B, t); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      const o = put(g, geo, new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xd0d0d0, roughness: 0.5 }), 0, y, 0); o.scale.set(sx, sy, sz); return o;
+    }
+
+    // Эмблемы на груди (как в клипах)
+    const EMBS = [
+      (g, a) => { [[-9,1,0,-9],[0,-9,9,1],[9,1,9,9],[9,9,-9,9],[-9,9,-9,1]].forEach(s => seg(g, s[0], s[1], s[2], s[3], 2, a)); poly([[-2.5,2],[2.5,2],[2.5,9],[-2.5,9]], a, g, 0, 0, 0); },
+      (g, a) => { poly([[0,-10],[2,-2],[10,0],[2,2],[0,10],[-2,2],[-10,0],[-2,-2]], a, g, 0, 0, 0); },
+      (g, a) => { [[0,-9,0,9],[-9,0,9,0],[-6.4,-6.4,6.4,6.4],[-6.4,6.4,6.4,-6.4]].forEach(s => seg(g, s[0], s[1], s[2], s[3], 2.6, a)); },
+      (g, a) => { poly([[2,-10],[-6,2],[0,2],[-2,10],[6,-2],[0,-2]], a, g, 0, 0, 0); },
+      (g, a) => { [[0,0,-7,6],[0,0,7,6],[0,0,0,-8]].forEach(s => seg(g, s[0], s[1], s[2], s[3], 1.8, a)); disc(g, 2.6, a, -7, 6); disc(g, 2.6, a, 7, 6); disc(g, 2.6, a, 0, -8); disc(g, 3.4, a, 0, 0); },
+      (g, a) => { [[-7,-7,7,-7],[7,-7,7,7],[7,7,-7,7],[-7,7,-7,-7],[-4,-10,-4,-7],[0,-10,0,-7],[4,-10,4,-7],[-4,7,-4,10],[0,7,0,10],[4,7,4,10]].forEach(s => seg(g, s[0], s[1], s[2], s[3], s[0] === s[2] ? 1.5 : 2, a)); poly([[-3,-3],[3,-3],[3,3],[-3,3]], a, g, 0, 0, 0); }
+    ];
+    // Головы: LOCAL-робот, GEMINI-шар со звёздами, CLAUDE-солнце, GROQ-шлем, OPENROUTER-антенна, NVIDIA-«глаз»
+    const HEADS = [
+      g => { rbox(g, 0.42, 0.38, 0.36, 0.05, mS(0x9ca3af), 0, HC, 0); put(g, new THREE.BoxGeometry(0.315, 0.23, 0.02), mB(0x07130d), 0, HC + 0.021, 0.178);
+        const gr = mB(0x6ee7a8); eyeBox(g, 0.063, 0.063, gr, -0.0735, HC + 0.052, 0.19); eyeBox(g, 0.063, 0.063, gr, 0.0735, HC + 0.052, 0.19); eyeBox(g, 0.147, 0.025, gr, 0, HC - 0.044, 0.19);
+        const ea = mS(0x6b7280); ball(g, 0.032, ea, -0.245, HC, 0); ball(g, 0.032, ea, 0.245, HC, 0); },
+      g => { gsphere(g, 0.22, 0.21, 0.2, 0x3f78e6, 0x8a5cf0, HC); const w = mB(0xffffff), star = [[0,-5],[1,-1],[5,0],[1,1],[0,5],[-1,1],[-5,0],[-1,-1]];
+        poly(star, w, g, -0.084, HC + 0.021, 0.186); poly(star, w, g, 0.084, HC + 0.021, 0.186);
+        const sm = put(g, new THREE.TorusGeometry(0.06, 0.01, 8, 16, PI), w, 0, HC - 0.094, 0.172); sm.rotation.z = PI; sm.scale.y = 0.5; },
+      g => { const o = mS(0xd97757, 0.55), d = mB(0x2a1a14); ball(g, 0.22, o, 0, HC, 0);
+        [-0.5, 0, 0.5].forEach(a => { const s = tube(g, 0.013, 0.1, o, Math.sin(a) * 0.27, HC + Math.cos(a) * 0.27, 0); s.rotation.z = -a; });
+        [-1, 1].forEach(s => { put(g, new THREE.TorusGeometry(0.068, 0.01, 8, 20), d, s * 0.084, HC + 0.021, 0.2); put(g, new THREE.CircleGeometry(0.023, 12), d, s * 0.084, HC + 0.021, 0.205); });
+        tube(g, 0.007, 0.04, d, 0, HC + 0.021, 0.2).rotation.z = PI / 2;
+        const sm = put(g, new THREE.TorusGeometry(0.06, 0.01, 8, 16, PI), d, 0, HC - 0.094, 0.19); sm.rotation.z = PI; sm.scale.y = 0.5; },
+      g => { const pts = [[-18,-42],[0,-47],[18,-42],[22,-22],[18,-3],[0,2],[-18,-3],[-22,-22]], sh = new THREE.Shape();
+        pts.forEach((q, i) => { const X = q[0] * KK, Y = -q[1] * KK; if (i) sh.lineTo(X, Y); else sh.moveTo(X, Y); });
+        const geo = new THREE.ExtrudeGeometry(sh, { depth: 0.26, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.02, bevelSegments: 2 }); geo.translate(0, 0, -0.13);
+        put(g, geo, mS(0xff7a45), 0, 0, 0); put(g, new THREE.BoxGeometry(0.357, 0.115, 0.02), mS(0x111111), 0, 0.268, 0.165);
+        const w = mB(0xffffff); eyeBox(g, 0.084, 0.03, w, -0.0735, 0.268, 0.176); eyeBox(g, 0.084, 0.03, w, 0.0735, 0.268, 0.176);
+        const sl = mS(0xff7a45); [[-34.5,-30,9],[-37,-22,14],[-34.5,-14,9]].forEach(l => put(g, new THREE.BoxGeometry(l[2] * KK, 0.02, 0.012), sl, l[0] * KK, -l[1] * KK, 0)); },
+      g => { const t = mS(0x2dd4bf), d = mB(0x08272e); rbox(g, 0.42, 0.38, 0.36, 0.1, t, 0, HC, 0); tube(g, 0.012, 0.105, t, 0, HC + 0.24, 0); ball(g, 0.036, mS(0xfbbf24), 0, HC + 0.305, 0);
+        [-1, 1].forEach(s => put(g, new THREE.CircleGeometry(0.0315, 14), d, s * 0.084, HC + 0.021, 0.181)); put(g, new THREE.BoxGeometry(0.147, 0.025, 0.01), d, 0, HC - 0.094, 0.181); },
+      g => { const gr = mS(0x76b900), dk = mS(0x0b1400), f = mS(0x4a7300); rbox(g, 0.42, 0.38, 0.36, 0.085, gr, 0, HC, 0);
+        [-9, 0, 9].forEach(x => put(g, new THREE.BoxGeometry(0.042, 0.063, 0.1), f, x * KK, HC + 0.215, 0)); put(g, new THREE.BoxGeometry(0.315, 0.158, 0.02), dk, 0, HC + 0.016, 0.18);
+        const e = mB(0xb6ff3c), p = mB(0x0b1400); [-1, 1].forEach(s => { put(g, new THREE.CircleGeometry(0.042, 16), e, s * 0.063, HC + 0.016, 0.192); put(g, new THREE.CircleGeometry(0.017, 12), p, s * 0.063, HC + 0.016, 0.194); }); }
+    ];
+
+    // Скелет-образ: таз → поясница → грудь → голова, плечи/локти, бёдра/колени/щиколотки + яркие сценические костюмы
+    function makeBot(id) {
+      const st = CHAR_STYLE[id];
+      const suit = mS(st.suit, 0.35, st.metal), suit2 = mS(st.suit2, 0.45, 0.25);
+      const pants = mS(st.pants, 0.48, 0.22), skin = mS(st.skin, 0.4, 0.2), shoe = mS(st.shoe, 0.3, 0.35);
+      const trim = mS(st.trim, 0.3, 0.45);
+      const acc = new THREE.MeshStandardMaterial({ color: st.acc, emissive: st.acc, emissiveIntensity: 0.22, roughness: 0.32, metalness: 0.35, side: THREE.DoubleSide });
+      const root = new THREE.Group(), R = {};
+      const hips = jnt(root, 0, H0, 0), spine = jnt(hips, 0, 0.05, 0), chest = jnt(spine, 0, 0.22, 0), head = jnt(chest, 0, 0.32, 0);
+      R.hips = hips; R.spine = spine; R.chest = chest; R.head = head;
+
+      // Таз, ремень с неоновой пряжкой и контрастная поясница
+      ell(hips, pants, 0, 0, 0, 0.175, 0.13, 0.125);
+      const belt = put(hips, new THREE.CylinderGeometry(0.165, 0.17, 0.045, 24), suit2, 0, 0.065, 0); belt.scale.set(1.05, 1, 0.82);
+      put(hips, new THREE.BoxGeometry(0.085, 0.05, 0.03), acc, 0, 0.065, 0.132);
+      tube(spine, 0.118, 0.24, suit2, 0, 0.11, 0);
+      put(spine, new THREE.CylinderGeometry(0.123, 0.123, 0.032, 20), trim, 0, 0.09, 0);
+
+      // Куртка/жилет на груди + воротник-стойка + яркие лацканы и полосы
+      ell(chest, suit, 0, 0.14, 0, 0.205, 0.225, 0.135);
+      const collar = put(chest, new THREE.CylinderGeometry(0.085, 0.11, 0.065, 20), trim, 0, 0.31, -0.005); collar.scale.set(1.1, 1, 0.9);
+      [-0.68, 0, 0.68].forEach((o, k) => {
+        const s = put(chest, new THREE.SphereGeometry(1.015, 8, 20, PI / 2 + o - 0.055, 0.11, 0.5, 2.05), k === 0 ? acc : trim, 0, 0.14, 0);
+        s.scale.set(0.206, 0.226, 0.136);
+      });
+      tube(head, 0.062, 0.1, suit2, 0, 0.04, 0);
+      EMBS[st.i](jnt(chest, 0, 0.17, 0.138), acc);
+      HEADS[st.i](jnt(head, 0, 0, 0));
+
+      ['L', 'R'].forEach(n => {
+        const sg = n === 'L' ? 1 : -1;
+        const sh = jnt(chest, sg * 0.2, 0.28, 0), el = jnt(sh, 0, -0.3, 0), hp = jnt(hips, sg * 0.11, -0.02, 0), kn = jnt(hp, 0, -0.45, 0), an = jnt(kn, 0, -0.45, 0);
+        R['sh' + n] = sh; R['el' + n] = el; R['hip' + n] = hp; R['kn' + n] = kn;
+
+        // Плечевые накладки, контрастные рукава и светящиеся манжеты
+        ball(sh, 0.072, trim);
+        put(sh, new THREE.TorusGeometry(0.066, 0.012, 8, 18), acc, sg * 0.01, 0.01, 0).rotation.y = PI / 2;
+        tube(sh, 0.056, 0.3, suit, 0, -0.15, 0);
+        ball(el, 0.058, suit2);
+        tube(el, 0.05, 0.28, suit2, 0, -0.14, 0);
+        put(el, new THREE.CylinderGeometry(0.054, 0.054, 0.036, 16), trim, 0, -0.25, 0); // яркий манжет
+        ball(el, 0.06, skin, 0, -0.31, 0);
+        put(sh, new THREE.BoxGeometry(0.015, 0.28, 0.012), acc, 0, -0.15, 0.057);
+        put(el, new THREE.BoxGeometry(0.015, 0.24, 0.012), trim, 0, -0.14, 0.051);
+
+        // Штаны с лампасами, наколенники и кроссовки с неоновой подошвой
+        ball(hp, 0.088, pants);
+        tube(hp, 0.077, 0.45, pants, 0, -0.225, 0);
+        put(hp, new THREE.BoxGeometry(0.016, 0.42, 0.014), acc, sg * 0.074, -0.225, 0); // лампас на бедре
+        ball(kn, 0.075, trim); // цветной наколенник
+        tube(kn, 0.067, 0.45, pants, 0, -0.225, 0);
+        put(kn, new THREE.BoxGeometry(0.016, 0.42, 0.014), trim, sg * 0.064, -0.225, 0); // лампас на голени
+        ball(an, 0.065, acc);
+        ell(an, shoe, 0, 0.006, 0.05, 0.088, 0.052, 0.125);
+        ell(an, acc, 0, -0.025, 0.05, 0.091, 0.018, 0.128); // яркая подошва
+      });
+      root.scale.setScalar(SK);
+      return { root, R, acc };
+    }
+
+    // Инструменты в стиле «Скелетика»
+    function addGuitar(chest, col, L) {
+      // гитара крепится к кости груди: те же координаты, что в «Группе» Скелетика, и двигается вместе с телом
+      const g = new THREE.Group(); chest.add(g); g.userData.y0 = 0;
+      const m = new THREE.MeshStandardMaterial({ color: col, roughness: 0.4, metalness: 0.25 }), wd = mS(0x3b2f2a), dk = mS(0x111111), q = new THREE.Group();
+      q.rotation.z = -0.95; q.position.set(-0.02, -0.09, 0.24); g.add(q);
+      put(q, new THREE.SphereGeometry(1, 20, 14), m).scale.set(0.17, 0.22, 0.05);
+      put(q, new THREE.BoxGeometry(0.1, 0.026, 0.012), dk, 0, 0.03, 0.05); put(q, new THREE.BoxGeometry(0.1, 0.026, 0.012), dk, 0, -0.07, 0.05);
+      put(q, new THREE.BoxGeometry(0.045, L, 0.03), wd, 0, 0.2 + L / 2, 0.02); put(q, new THREE.BoxGeometry(0.07, 0.09, 0.03), m, 0, 0.2 + L, 0.02);
+      return g;
+    }
+    function addDrums(root, accHex) {
+      // Точная модель ударной установки из «Скелетика — полигона движений» (stg z=0.45 + ig z=-0.08 -> z=0.37, y=0.08)
+      const g = new THREE.Group(); g.position.set(0, 0.08, 0.37); root.add(g); g.userData.y0 = 0.08;
+      const mm = (c, k) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.5, metalness: k || 0 });
+      const cyl = (p, r, h, m, x, y, z) => put(p, new THREE.CylinderGeometry(r, r, h, 24), m, x, y, z);
+      const w = mm(0xe5e7eb), a = mm(accHex), au = mm(0xe5c14a, 0.8);
+      cyl(g, 0.22, 0.1, w, 0, 0.9, 0); cyl(g, 0.225, 0.03, a, 0, 0.95, 0);
+      [-1, 1].forEach(s => {
+        cyl(g, 0.14, 0.14, w, s * 0.36, 1.0, -0.08);
+        cyl(g, 0.145, 0.03, a, s * 0.36, 1.07, -0.08);
+        cyl(g, 0.01, 0.55, au, s * 0.5, 1.1, -0.15);
+        cyl(g, 0.2, 0.012, au, s * 0.5, 1.4, -0.15);
+      });
+      const kd = cyl(g, 0.26, 0.3, w, 0, 0.3, 0.12); kd.rotation.x = PI / 2;
+      const kr = cyl(g, 0.265, 0.03, a, 0, 0.3, 0.28); kr.rotation.x = PI / 2;
+      return g;
+    }
+
+    function createRockerCharacter(member) {
+      const st = CHAR_STYLE[member.id], S = STAGE[member.id];
+      const group = new THREE.Group(); group.position.set(S[0], S[1], S[2]); group.rotation.y = S[3];
+      const bot = makeBot(member.id); group.add(bot.root);
+      let kind = 'guitar', inst;
+      if (member.id === 'NVIDIA') { kind = 'drums'; inst = addDrums(bot.root, st.acc); }
+      else if (member.id === 'GROQ') { kind = 'bass'; inst = addGuitar(bot.R.chest, st.acc, 0.62); }
+      else { inst = addGuitar(bot.R.chest, st.acc, 0.5); }
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.48, 24), new THREE.MeshBasicMaterial({ color: member.color, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }));
+      ring.rotation.x = -PI / 2; ring.position.y = 0.02; group.add(ring);
+      scene.add(group);
+      characterMeshes[member.id] = { root: group, R: bot.R, acc: bot.acc, st, inst, kind, ring, Q: null, seat: !!S[4], basePos: new THREE.Vector3(S[0], S[1], S[2]), color: member.color };
+    }
+    BAND_MEMBERS.forEach(createRockerCharacter);
+
+    // Позы рук (из режима «Группа» в Скелетике): гитара/бас и ударные
+    const GT = [
+      { LA:[-0.098,0.231,0.329,-1.981], LB:[-0.539,0.455,0.579,-1.808], RU:[0.271,1.177,-0.983,-1.206], RD:[0.177,1.274,-0.889,-0.931] },
+      { LA:[-0.297,0.379,0.431,-1.926], LB:[-0.808,0.4,0.827,-1.577], RU:[0.271,1.177,-0.983,-1.206], RD:[0.177,1.274,-0.889,-0.931] }
+    ];
+    const AT0 = [
+      [[-0.191,-0.212,-0.155,-1.211,-0.302,-0.196,-0.157,-0.8],[0.032,0.314,0.267,-1.782,0.052,0.271,0.232,-1.53],[-0.894,0.653,0.75,-1.895,-0.702,0.729,0.655,-1.9]],
+      [[-0.191,0.212,0.155,-1.211,-0.302,0.196,0.157,-0.8],[0.032,-0.314,-0.267,-1.782,0.052,-0.271,-0.232,-1.53],[-0.894,-0.653,-0.75,-1.895,-0.702,-0.729,-0.655,-1.9]]
+    ];
+    function lerpA(a, b, w) { return a.map((v, i) => v + (b[i] - v) * w); }
+    function SJ(R, n, x, y, z) { R[n].rotation.set(x || 0, y || 0, z || 0); }
+    // Точная логика ударов из «Скелетика — полигона движений» (hit(0, k, b)):
+    // руки работают только по малому (0) и томам (1) ниже плоскости тарелок, без взмаха сквозь железо
+    function drumHit(h, k, bar) {
+      const hs = [-1, -1];
+      let r = -1;
+      if (k === 0 || k === 8 || k === 10) { r = 1; hs[1] = 1; }
+      if (k === 4 || k === 12) { r = 0; hs[0] = 0; }
+      if (k % 2 === 0) { if (r < 0) { r = (k % 4) ? 1 : 0; hs[r] = 0; } }
+      if (k === 0 && (bar & 3) === 0) hs[0] = 1;
+      if (k === 14) hs[0] = 1;
+      return hs[h];
+    }
+    function animateBot(m, idx, now, dt, soloId, kick) {
+      const c = characterMeshes[m.id], R = c.R, playing = engine.isPlaying, solo = m.id === soloId;
+      const beat = now / BEAT_DURATION, bb = playing ? Math.sin(beat * PI) : 0, ab = Math.abs(bb);
+      const stepDur = BEAT_DURATION / 4, s = Math.floor(now / stepDur);
+      if (c.kind === 'drums') {
+        const A = [];
+        for (let h = 0; h < 2; h++) {
+          let ls = -1, tg = 0;
+          for (let d = 0; d < 16; d++) { const sp = s - d; if (sp < 0) break; const t = drumHit(h, sp % 16, Math.floor(sp / 16) % TOTAL_BARS); if (t >= 0) { ls = sp; tg = t; break; } }
+          const ar = (playing && ls >= 0) ? Math.exp(-Math.max(0, now - ls * stepDur) * 10) : 0, e = AT0[h][tg];
+          A.push([0, 1, 2, 3].map(j => e[j] + (e[j + 4] - e[j]) * ar));
+        }
+        if (!c.Q) c.Q = A; else { const kk = 1 - Math.exp(-Math.min(dt, 0.05) * 28); for (let h = 0; h < 2; h++) for (let j = 0; j < 4; j++) c.Q[h][j] += (A[h][j] - c.Q[h][j]) * kk; }
+        SJ(R, 'shL', c.Q[0][0], c.Q[0][1], c.Q[0][2]); SJ(R, 'elL', c.Q[0][3]); SJ(R, 'shR', c.Q[1][0], c.Q[1][1], c.Q[1][2]); SJ(R, 'elR', c.Q[1][3]);
+      } else {
+        const G = GT[c.kind === 'bass' ? 1 : 0], env = playing ? Math.exp(-(now % (BEAT_DURATION / 2)) * 10) : 0;
+        const lp = lerpA(G.LA, G.LB, 0.5 + 0.5 * Math.sin(now * 1.4 + idx)), rp = lerpA(G.RU, G.RD, env);
+        SJ(R, 'shL', lp[0], lp[1], lp[2]); SJ(R, 'elL', lp[3]); SJ(R, 'shR', rp[0], rp[1], rp[2]); SJ(R, 'elR', rp[3]);
+      }
+      // хедбэнг и стойка (у солиста шире и ниже)
+      R.head.rotation.set(playing ? Math.sin(beat * PI * 2) * (solo ? 0.35 : 0.15) : 0, 0.12 * Math.sin(now * 1.5 + idx), 0);
+      const bk = c.kind === 'drums' ? 0 : 1; R.chest.rotation.set(bk * (0.05 * bb - (solo ? 0.1 : 0) + (c.seat ? 0.08 : 0)), 0, 0); R.spine.rotation.set(bk * 0.03 * bb, 0, 0);
+      const a = c.seat ? -1.5 : -0.1, b = c.seat ? 1.5 + 0.1 * ab : 0.1 + 0.2 * ab + (solo ? 0.15 : 0), sp = c.seat ? 0.1 : 0.06 + (solo ? 0.14 : 0);
+      R.hipL.rotation.set(a, 0, sp); R.hipR.rotation.set(a, 0, -sp); R.knL.rotation.set(b, 0, 0); R.knR.rotation.set(b, 0, 0);
+      R.hips.position.y = c.seat ? 0.16 : 0.07 + 0.45 * (Math.cos(a) + Math.cos(a + b));
+      if (c.kind === 'drums') c.inst.position.y = c.inst.userData.y0 + (R.hips.position.y - 0.97);
+      // подпрыгивание, кольцо и свечение акцентов у солиста
+      c.root.position.y = c.basePos.y + (playing ? Math.abs(Math.sin(beat * PI + idx)) * (solo ? 0.14 : 0.05) * (c.seat ? 0.4 : 1) : 0);
+      c.ring.scale.setScalar(solo ? 1.15 + kick * 0.25 : 0.75); c.ring.material.opacity = solo ? 0.95 : 0.2;
+      c.acc.emissive.setHex(c.st.acc); c.acc.emissiveIntensity = solo ? 0.45 + kick * 0.5 : 0.06;
+    }
+
+
+    /**
+     * ============================================================================
+     * 4. УПРАВЛЕНИЕ UI, СИНХРОНИЗАЦИЯ ТАЙМЛАЙНА И ЗАПИСЬ В WEBM
+     * ============================================================================
+     */
+    const engine = new RockAudioEngine();
+    let autoCamera = true;
+    let manualSoloist = 'AUTO';
+    let isPortrait = false;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+
+    // Утилита уведомлений без alert()
+    function showToast(text) {
+      const el = document.getElementById('toast-msg');
+      el.textContent = text;
+      el.style.opacity = '1';
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => { el.style.opacity = '0'; }, 2800);
+    }
+
+    function formatTime(sec) {
+      const m = Math.floor(sec / 60);
+      const s = Math.floor(sec % 60);
+      return `${m}:${s < 10 ? '0' : ''}${s}`;
+    }
+
+    document.getElementById('time-total').textContent = formatTime(TOTAL_DURATION);
+
+    // Кнопка Play / Pause
+    const btnPlay = document.getElementById('btn-play');
+    btnPlay.addEventListener('click', () => {
+      if (engine.isPlaying) {
+        engine.pause();
+        document.getElementById('play-icon').textContent = '▶';
+        document.getElementById('play-text').textContent = 'PLAY';
+      } else {
+        engine.play();
+        document.getElementById('play-icon').textContent = '❚❚';
+        document.getElementById('play-text').textContent = 'PAUSE';
+      }
+    });
+
+    // Кнопка Stop
+    document.getElementById('btn-stop').addEventListener('click', () => {
+      engine.stop(true);
+      document.getElementById('play-icon').textContent = '▶';
+      document.getElementById('play-text').textContent = 'PLAY';
+    });
+
+    // Перемотка по полосе прогресса
+    document.getElementById('timeline-bar').addEventListener('click', (e) => {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      engine.seek(ratio * TOTAL_DURATION);
+    });
+
+    // Фейдеры громкости
+    document.getElementById('vol-vocal').addEventListener('input', (e) => {
+      if (engine.vocalGain) engine.vocalGain.gain.value = parseFloat(e.target.value);
+    });
+    document.getElementById('vol-music').addEventListener('input', (e) => {
+      if (engine.musicGain) engine.musicGain.gain.value = parseFloat(e.target.value);
+    });
+
+    // Загрузка пользовательского аудиофайла (MP3 / WAV)
+    document.getElementById('audio-upload').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        showToast(`Загрузка трека: ${file.name}...`);
+        await engine.loadCustomVocalFile(file);
+        document.getElementById('vocal-source-label').textContent = `Файл: ${file.name.slice(0, 18)}`;
+        showToast('Аудиофайл синхронизирован с 3D-сценой!');
+      } catch (err) {
+        showToast('Ошибка декодирования аудиофайла');
+      }
+    });
+
+    // Переключение 16:9 / 9:16
+    document.getElementById('btn-aspect').addEventListener('click', () => {
+      isPortrait = !isPortrait;
+      const wrapper = document.getElementById('canvas-container');
+      wrapper.classList.toggle('portrait-mode', isPortrait);
+      document.getElementById('aspect-label').textContent = isPortrait ? '9:16' : '16:9';
+      document.getElementById('aspect-icon').textContent = isPortrait ? '▯' : '▭';
+      setTimeout(onResize, 360);
+    });
+
+    // Переключение авто-камеры
+    document.getElementById('btn-autocam').addEventListener('click', () => {
+      autoCamera = !autoCamera;
+      document.getElementById('autocam-label').textContent = autoCamera ? 'Авто-камера: ВКЛ' : 'Авто-камера: РУЧНАЯ';
+      showToast(autoCamera ? 'Автоматический режиссер включен' : 'Ручное управление камерой (мышь/тач)');
+    });
+
+    // Селектор солистов
+    document.querySelectorAll('.solo-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        manualSoloist = btn.dataset.soloist;
+        document.querySelectorAll('.solo-btn').forEach(b => {
+          b.className = 'solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition';
+        });
+        btn.className = 'solo-btn px-2 py-1.5 rounded-lg text-[10px] font-mono-tech font-bold bg-rose-600 text-white border border-rose-400/50 transition';
+      });
+    });
+
+    // Запись клипа в WebM (Canvas + Web Audio API Stream)
+    document.getElementById('btn-record').addEventListener('click', () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        return;
+      }
+      try {
+        engine.init();
+        const canvasStream = renderer.domElement.captureStream(30);
+        const audioTracks = engine.mediaStreamDest.stream.getAudioTracks();
+        const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+
+        recordedChunks = [];
+        mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9,opus' });
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onstop = () => {
+          const blob = new Blob(recordedChunks, { type: 'video/webm' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `kot_platzkart_rock_${isPortrait ? '9x16' : '16x9'}.webm`;
+          a.click();
+          URL.revokeObjectURL(url);
+
+          document.getElementById('rec-label').textContent = 'Запись WebM';
+          document.getElementById('rec-indicator').classList.remove('rec-dot', 'bg-rose-200');
+          showToast('Видеоклип WebM сохранен!');
+        };
+
+        mediaRecorder.start();
+        if (!engine.isPlaying) btnPlay.click();
+
+        document.getElementById('rec-label').textContent = 'Стоп & Скачать';
+        document.getElementById('rec-indicator').classList.add('rec-dot', 'bg-rose-200');
+        showToast('Идет запись 3D-клипа со звуком...');
+      } catch (err) {
+        showToast('Браузер не поддерживает прямой захват WebM');
+      }
+    });
+
+    // Адаптивный ресайз
+    function onResize() {
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+    window.addEventListener('resize', onResize);
+
+    /**
+     * ============================================================================
+     * 5. ГЛАВНЫЙ ЦИКЛ РЕНДЕРА И СИНХРОНИЗАЦИИ АНИМАЦИИ С 136 BPM
+     * ============================================================================
+     */
+    let lastSectionLabel = '';
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+      const now = engine.getCurrentTime();
+      const currentBar = now / BAR_DURATION;
+      const beatPhase = (now % BEAT_DURATION) / BEAT_DURATION; // 0..1 на каждый удар
+      const kickPulse = Math.pow(1 - beatPhase, 3); // Резкий импульс на сильную долю
+
+      // Обновление UI времени и прогресс-бара
+      document.getElementById('time-current').textContent = formatTime(now);
+      document.getElementById('timeline-progress').style.width = `${(now / TOTAL_DURATION) * 100}%`;
+
+      // Пульсация LED-индикатора BPM
+      const led = document.getElementById('beat-led');
+      led.style.transform = `scale(${1 + kickPulse * 0.45})`;
+
+      // Определение активной секции по таймлайн-манифесту
+      const activeSection = TIMELINE_SECTIONS.find(s => currentBar >= s.startBar && currentBar < s.endBar) || TIMELINE_SECTIONS[0];
+      const activeSoloistId = manualSoloist === 'AUTO' ? activeSection.soloist : manualSoloist;
+      const soloistMeta = BAND_MEMBERS.find(m => m.id === activeSoloistId) || BAND_MEMBERS[0];
+
+      if (activeSection.label !== lastSectionLabel) {
+        lastSectionLabel = activeSection.label;
+        document.getElementById('section-badge').textContent = activeSection.label;
+        document.getElementById('subtitle-main').textContent = activeSection.lyricMain;
+        document.getElementById('subtitle-sub').textContent = activeSection.lyricSub;
+      }
+
+      document.getElementById('soloist-pill').textContent = `СОЛИСТ: ${soloistMeta.name}`;
+      document.getElementById('soloist-pill').style.borderColor = soloistMeta.hex;
+      document.getElementById('soloist-pill').style.color = soloistMeta.hex;
+
+      // Энергия аудиоспектра
+      const energy = engine.getAudioEnergy();
+      const totalDrive = engine.isPlaying ? Math.max(kickPulse * 0.7, energy.bass) : 0.1;
+
+      // Движение огней и столбов за окнами вагона (эффект скорости поезда)
+      const trainSpeed = engine.isPlaying ? 28 : 6;
+      outsideObjects.forEach(obj => {
+        obj.mesh.position.z += delta * trainSpeed;
+        if (obj.mesh.position.z > 10) {
+          obj.mesh.position.z -= 60;
+        }
+      });
+
+      // Пролетающий свет из окна в такт движению состава
+      windowPassingLight.position.z = ((now * 24) % 16) - 8;
+      windowPassingLight.intensity = engine.isPlaying ? (2.2 + kickPulse * 2.5) : 1.0;
+
+      // Сценический свет под цвет активного солиста + стробоскоп в припеве/соло
+      spotMain.color.setHex(soloistMeta.color);
+      spotMain.intensity = 2.4 + totalDrive * 3.2;
+      neonStripMat.color.setHex(soloistMeta.color);
+
+      // Анимация 6 образов из Скелетика
+      BAND_MEMBERS.forEach((m, idx) => animateBot(m, idx, now, delta, activeSoloistId, kickPulse));
+
+      // Режиссерская авто-камера с легким роковым шейком на сильные доли
+      if (autoCamera) {
+        const targetChar = characterMeshes[activeSoloistId];
+        const targetPos = targetChar.basePos.clone().add(new THREE.Vector3(0, targetChar.seat ? 0.55 : 0.85, 0));
+        controls.target.lerp(targetPos, 0.06);
+
+        const camAngle = now * 0.35;
+        const shakeX = engine.isPlaying ? (Math.random() - 0.5) * kickPulse * 0.07 : 0;
+        const shakeY = engine.isPlaying ? (Math.random() - 0.5) * kickPulse * 0.07 : 0;
+
+        const desiredCamPos = new THREE.Vector3(
+          targetChar.basePos.x * (targetChar.seat ? 0.1 : 0.45) + Math.sin(camAngle) * (targetChar.seat ? 0.6 : 0.85) + shakeX,
+          targetChar.basePos.y + (targetChar.seat ? 0.75 : 1.2) + Math.cos(camAngle * 0.7) * 0.2 + shakeY,
+          targetChar.basePos.z + (isPortrait ? 2.45 : 1.95)
+        );
+        camera.position.lerp(desiredCamPos, 0.045);
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.onload = () => {
+      onResize();
+      animate();
+    };
+  </script>
+</body>
+</html>
